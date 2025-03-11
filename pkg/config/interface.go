@@ -53,6 +53,11 @@ type Config interface {
 	// This method was introduced in project version 3.
 	SetPluginChain(pluginChain []string) error
 
+	// GetKubebuilderVersion returns the kubebuilder version.
+	GetKubebuilderVersion() string
+	// SetKubebuilderVersion sets the kubebuilder version.
+	SetKubebuilderVersion(version string) error
+
 	/* Boolean fields */
 
 	// IsMultiGroup checks if multi-group is enabled.
