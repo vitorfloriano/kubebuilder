@@ -54,8 +54,10 @@ type Config interface {
 	SetPluginChain(pluginChain []string) error
 
 	// GetKubebuilderVersion returns the kubebuilder version.
+	// This method was introduced in project version 3.
 	GetKubebuilderVersion() string
 	// SetKubebuilderVersion sets the kubebuilder version.
+	// This method was introduced in project version 3.
 	SetKubebuilderVersion(version string) error
 
 	/* Boolean fields */
