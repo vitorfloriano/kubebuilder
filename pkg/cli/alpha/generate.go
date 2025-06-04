@@ -34,7 +34,7 @@ import (
 //
 // Technically, implementing functions that allow re-scaffolding with the exact plugins and project-specific
 // code of external projects is not feasible within Kubebuilder’s current design.
-func NewScaffoldCommand() *cobra.Command {
+func NewGenerateCommand() *cobra.Command {
 	opts := internal.Generate{}
 	scaffoldCmd := &cobra.Command{
 		Use:   "generate",

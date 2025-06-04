@@ -29,15 +29,7 @@ const (
 )
 
 var alphaCommands = []*cobra.Command{
-	newAlphaCommand(),
-	alpha.NewScaffoldCommand(),
-}
-
-func newAlphaCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		// TODO: If we need to create alpha commands please add a new file for each command
-	}
-	return cmd
+	alpha.NewGenerateCommand(),
 }
 
 func (c *CLI) newAlphaCmd() *cobra.Command {
