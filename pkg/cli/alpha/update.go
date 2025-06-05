@@ -19,7 +19,7 @@ Provide usage examples.`,
 		//	},
 		Run: func(_ *cobra.Command, _ []string) {
 			if err := opts.Update(); err != nil {
-				log.Fatalf("TODO: fail message: %s", err)
+				log.Fatalf("%s", err)
 			}
 		},
 	}
