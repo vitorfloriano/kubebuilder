@@ -19,11 +19,13 @@ Provide usage examples.`,
 		//	},
 		Run: func(_ *cobra.Command, _ []string) {
 			if err := opts.Update(); err != nil {
-				log.Fatalf("Failed to execute: %s", err)
+				log.Fatalf("TODO: fail message: %s", err)
 			}
 		},
 	}
 	// TODO: add flags here later
+	updateCmd.Flags().StringVar(&opts.FromVersion, "from-version", "",
+		"TODO: add usage of the --from-version tag here")
 
 	return updateCmd
 }
