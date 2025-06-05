@@ -10,26 +10,27 @@ import (
 )
 
 type Update struct {
-	// TODO: populate the struct
 	FromVersion string
 }
 
 func (opts *Update) Update() error {
-	// TODO: add implementation logic
-	fmt.Println("WIP...")
+	fmt.Println("WIP...") // TODO: remove this print later
 
 	projectConfigFile := yaml.New(machinery.Filesystem{FS: afero.NewOsFs()})
 	if err := projectConfigFile.LoadFrom(yaml.DefaultPath); err != nil { // TODO: assess if DefaultPath could be renamed to ConfigFilePath
-		return fmt.Errorf("TODO: add error message: %w", err)
+		return fmt.Errorf("Fail to run the command: %w", err) // TODO: improve the error message
 	}
 
 	cliVersion := projectConfigFile.Config().GetCliVersion()
 
-	// TODO: add logic for overriding the cliVersion from the PROJECT file with the
-	// value passed to the --from-version flag just so that projects prior to 4.6.0
-	// can use it.
-
-	log.Infof("TODO: add message for CLI version being used: %s", cliVersion)
+	if opts.FromVersion != "" {
+		// TODO: add normalization here
+		// users may input "4.5.0" or "v4.5.0"
+		// so better check for that
+		log.Infof("Overriding PROJECT cliVersion from %s to %s", cliVersion, opts.FromVersion) // TODO: improve override message
+	} else {
+		log.Infof("CLI version being used: %s", cliVersion) // TODO: improve the log message
+	}
 
 	return nil
 }
