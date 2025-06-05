@@ -30,6 +30,7 @@ const (
 
 var alphaCommands = []*cobra.Command{
 	alpha.NewGenerateCommand(),
+	alpha.NewUpdateCommand(),
 }
 
 func (c *CLI) newAlphaCmd() *cobra.Command {
