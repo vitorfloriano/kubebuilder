@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 
@@ -21,8 +22,8 @@ type Update struct {
 func (opts *Update) Update() error {
 
 	projectConfigFile := yaml.New(machinery.Filesystem{FS: afero.NewOsFs()})
-	if err := projectConfigFile.LoadFrom(yaml.DefaultPath); err != nil { // TODO: assess if DefaultPath could be renamed to ConfigFilePath
-		return fmt.Errorf("Fail to run command: %w", err)
+	if err := projectConfigFile.LoadFrom(yaml.DefaultPath); err != nil { // TODO: assess if DefaultPath could be renamed to a more self-descriptive name
+		return fmt.Errorf("fail to run command: %w", err)
 	}
 
 	cliVersion := projectConfigFile.Config().GetCliVersion()
@@ -39,10 +40,13 @@ func (opts *Update) Update() error {
 
 	tempDir, err := opts.downloadKubebuilderBinary(cliVersion)
 	if err != nil {
-		return fmt.Errorf("Failed to download Kubebuilder %s binary: %w", cliVersion, err)
+		return fmt.Errorf("failed to download Kubebuilder %s binary: %w", cliVersion, err)
 	}
-
 	log.Infof("Downloaded binary kept at %s for debugging purposes", tempDir)
+
+	if err := opts.checkoutAncestorBranch(); err != nil {
+		return fmt.Errorf("failed to checkout the ancestor branch: %w", err)
+	}
 
 	return nil
 }
@@ -59,36 +63,52 @@ func (opts *Update) downloadKubebuilderBinary(version string) (string, error) {
 	fs := afero.NewOsFs()
 	tempDir, err := afero.TempDir(fs, "", "kubebuilder"+cliVersion+"-")
 	if err != nil {
-		return "", fmt.Errorf("Failed to create temporary directory: %w", err)
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
 	binaryPath := tempDir + "/kubebuilder"
 	file, err := os.Create(binaryPath)
 	if err != nil {
-		return "", fmt.Errorf("Failed to create the binary file: %w", err)
+		return "", fmt.Errorf("failed to create the binary file: %w", err)
 	}
 	defer file.Close()
 
 	response, err := http.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("Failed to download the binary: %w", err)
+		return "", fmt.Errorf("failed to download the binary: %w", err)
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Failed to download the binary: HTTP %d", response.StatusCode)
+		return "", fmt.Errorf("failed to download the binary: HTTP %d", response.StatusCode)
 	}
 
 	_, err = io.Copy(file, response.Body)
 	if err != nil {
-		return "", fmt.Errorf("Failed to write the binary content to file: %w", err)
+		return "", fmt.Errorf("failed to write the binary content to file: %w", err)
 	}
 
 	if err := os.Chmod(binaryPath, 0755); err != nil {
-		return "", fmt.Errorf("Failed to make binary executable: %w", err)
+		return "", fmt.Errorf("failed to make binary executable: %w", err)
 	}
 
 	log.Infof("Kubebuilder version %s succesfully downloaded to %s", cliVersion, binaryPath)
 
 	return tempDir, nil
+}
+
+func (opts *Update) checkoutAncestorBranch() error {
+	cmd := exec.Command("git", "checkout", "main")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout main branch: %w", err)
+	}
+	log.Info("Checked out main branch")
+
+	cmd = exec.Command("git", "checkout", "-b", "ancestor")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create and checkout ancestor branch: %w", err)
+	}
+	log.Info("Created and checked out ancestor branch")
+
+	return nil
 }
