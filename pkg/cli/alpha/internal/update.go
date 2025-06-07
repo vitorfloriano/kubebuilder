@@ -48,6 +48,10 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to checkout the ancestor branch: %w", err)
 	}
 
+	if err := opts.runAlphaGenerate(tempDir, cliVersion); err != nil {
+		return fmt.Errorf("failed to run alpha generate on ancestor branch: %w", err)
+	}
+
 	return nil
 }
 
@@ -98,17 +102,40 @@ func (opts *Update) downloadKubebuilderBinary(version string) (string, error) {
 }
 
 func (opts *Update) checkoutAncestorBranch() error {
-	cmd := exec.Command("git", "checkout", "main")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to checkout main branch: %w", err)
-	}
-	log.Info("Checked out main branch")
 
-	cmd = exec.Command("git", "checkout", "-b", "ancestor")
+	cmd := exec.Command("git", "checkout", "-b", "ancestor")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create and checkout ancestor branch: %w", err)
 	}
 	log.Info("Created and checked out ancestor branch")
+
+	return nil
+}
+
+func (opts *Update) runAlphaGenerate(tempDir, version string) error {
+	tempBinaryPath := tempDir + "/kubebuilder"
+
+	originalPath := os.Getenv("PATH")
+	tempEnvPath := tempDir + ":" + originalPath
+
+	if err := os.Setenv("PATH", tempEnvPath); err != nil {
+		return fmt.Errorf("failed to set temporary PATH: %w", err)
+	}
+	defer func() {
+		if err := os.Setenv("PATH", originalPath); err != nil {
+			log.Errorf("failed to restore original PATH: %w", err)
+		}
+	}()
+
+	cmd := exec.Command(tempBinaryPath, "alpha", "generate")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = os.Environ()
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run alpha generate: %w", err)
+	}
+	log.Info("Successfully ran alpha generate using Kubebuilder ", version)
 
 	return nil
 }
