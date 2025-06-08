@@ -52,6 +52,10 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to run alpha generate on ancestor branch: %w", err)
 	}
 
+	if err := opts.checkoutCurrentOffAncestor(); err != nil {
+		return fmt.Errorf("failed to checkout current off ancestor: %w", err)
+	}
+
 	return nil
 }
 
@@ -103,8 +107,8 @@ func (opts *Update) downloadKubebuilderBinary(version string) (string, error) {
 
 func (opts *Update) checkoutAncestorBranch() error {
 
-	cmd := exec.Command("git", "checkout", "-b", "ancestor")
-	if err := cmd.Run(); err != nil {
+	gitCmd := exec.Command("git", "checkout", "-b", "ancestor")
+	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to create and checkout ancestor branch: %w", err)
 	}
 	log.Info("Created and checked out ancestor branch")
@@ -136,6 +140,46 @@ func (opts *Update) runAlphaGenerate(tempDir, version string) error {
 		return fmt.Errorf("failed to run alpha generate: %w", err)
 	}
 	log.Info("Successfully ran alpha generate using Kubebuilder ", version)
+
+	gitCmd := exec.Command("git", "add", ".")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to stage changes in ancestor: %w", err)
+	}
+	log.Info("Successfully staged all changes in ancestor")
+
+	gitCmd = exec.Command("git", "commit", "-m", "Re-scaffold in ancestor")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit changes in ancestor: %w", err)
+	}
+	log.Info("Successfully commited changes in ancestor")
+
+	return nil
+}
+
+func (opts *Update) checkoutCurrentOffAncestor() error {
+	gitCmd := exec.Command("git", "checkout", "-b", "current", "ancestor")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout current branch off ancestor: %w", err)
+	}
+	log.Info("Sucessfully checked out current branch off ancestor")
+
+	gitCmd = exec.Command("git", "checkout", "master", "--", ".")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout content from master onto current: %w", err)
+	}
+	log.Info("Successfully checked out content from main onto current branch")
+
+	gitCmd = exec.Command("git", "add", ".")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to stage all changes in current: %w", err)
+	}
+	log.Info("Successfully staged all changes in current")
+
+	gitCmd = exec.Command("git", "commit", "-m", "Add content from main onto current branch")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit changes: %w", err)
+	}
+	log.Info("Successfully commited changes in current")
 
 	return nil
 }
