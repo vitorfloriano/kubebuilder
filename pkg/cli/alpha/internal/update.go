@@ -133,23 +133,23 @@ func (opts *Update) checkoutAncestorBranch() error {
 }
 
 func (opts *Update) cleanUpAncestorBranch() error {
-	cmd := exec.Command("rm", "-fr", ".")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to clean up the ancestor branch: %w", err)
-	}
-	log.Info("Succesfully cleaned up the ancestor branch")
-
-	gitCmd := exec.Command("git", "add", ".")
+	gitCmd := exec.Command("git", "rm", "-rf", ".")
 	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("failed to stage the cleanup: %w", err)
+		return fmt.Errorf("failed to remove tracked files in ancestor branch: %w", err)
 	}
-	log.Info("Succesfully staged the cleanup on ancestor")
+	log.Info("Successfully removed tracked files from ancestor branch")
+
+	gitCmd = exec.Command("git", "clean", "-fd")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to clean untracked files: %w", err)
+	}
+	log.Info("Successfully cleaned untracked files from ancestor branch")
 
 	gitCmd = exec.Command("git", "commit", "-m", "Clean up the ancestor branch")
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to commit the cleanup in ancestor branch: %w", err)
 	}
-	log.Info("Succesfully committed cleanup on ancestor")
+	log.Info("Successfully committed cleanup on ancestor")
 
 	return nil
 }
