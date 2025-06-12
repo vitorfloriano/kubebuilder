@@ -204,5 +204,17 @@ func (opts *Update) checkoutUpgradeOffAncestor() error {
 	}
 	log.Info("Successfully ran alpha generate on upgrade branch")
 
+	gitCmd = exec.Command("git", "add", ".")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to stage changes on upgrade: %w", err)
+	}
+	log.Info("Successfully staged all changes in upgrade branch")
+
+	gitCmd = exec.Command("git", "commit", "-m", "alpha generate in upgrade branch")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit changes in upgrade branch: %w", err)
+	}
+	log.Info("Successfully commited changes in upgrade branch")
+
 	return nil
 }
