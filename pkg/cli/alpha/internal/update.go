@@ -56,6 +56,10 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to checkout current off ancestor: %w", err)
 	}
 
+	if err := opts.checkoutUpgradeOffAncestor(); err != nil {
+		return fmt.Errorf("failed to checkout upgrade off ancestor: %w", err)
+	}
+
 	return nil
 }
 
@@ -161,7 +165,7 @@ func (opts *Update) checkoutCurrentOffAncestor() error {
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to checkout current branch off ancestor: %w", err)
 	}
-	log.Info("Sucessfully checked out current branch off ancestor")
+	log.Info("Successfully checked out current branch off ancestor")
 
 	gitCmd = exec.Command("git", "checkout", "master", "--", ".")
 	if err := gitCmd.Run(); err != nil {
@@ -180,6 +184,25 @@ func (opts *Update) checkoutCurrentOffAncestor() error {
 		return fmt.Errorf("failed to commit changes: %w", err)
 	}
 	log.Info("Successfully commited changes in current")
+
+	return nil
+}
+
+func (opts *Update) checkoutUpgradeOffAncestor() error {
+	gitCmd := exec.Command("git", "checkout", "-b", "upgrade", "ancestor")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout upgrade branch off ancestor: %w", err)
+	}
+	log.Info("Successfully checked out upgrade branch off ancestor")
+
+	cmd := exec.Command("kubebuilder", "alpha", "generate")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run alpha generate on upgrade branch: %w", err)
+	}
+	log.Info("Successfully ran alpha generate on upgrade branch")
 
 	return nil
 }
