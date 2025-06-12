@@ -60,6 +60,14 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to checkout upgrade off ancestor: %w", err)
 	}
 
+	if err := opts.checkoutMergeOffCurrent(); err != nil {
+		return fmt.Errorf("failed to checkout merge branch off current: %w", err)
+	}
+
+	if err := opts.mergeUpgradeIntoMerge(); err != nil {
+		return fmt.Errorf("failed to merge upgrade into merge branch: %w", err)
+	}
+
 	return nil
 }
 
@@ -215,6 +223,29 @@ func (opts *Update) checkoutUpgradeOffAncestor() error {
 		return fmt.Errorf("failed to commit changes in upgrade branch: %w", err)
 	}
 	log.Info("Successfully commited changes in upgrade branch")
+
+	return nil
+}
+
+func (opts *Update) checkoutMergeOffCurrent() error {
+	gitCmd := exec.Command("git", "checkout", "-b", "merge", "current")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout merge branch off current: %w", err)
+	}
+
+	return nil
+}
+
+func (opts *Update) mergeUpgradeIntoMerge() error {
+	gitCmd := exec.Command("git", "merge", "upgrade")
+	err := gitCmd.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			log.Warn("Merge with conflicts. Please resolve them manually")
+			return nil
+		}
+		return fmt.Errorf("failed to merge the upgrade branch into the merge branch: %w", err)
+	}
 
 	return nil
 }
