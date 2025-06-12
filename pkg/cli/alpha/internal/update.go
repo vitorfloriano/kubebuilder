@@ -48,6 +48,10 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to checkout the ancestor branch: %w", err)
 	}
 
+	if err := opts.cleanUpAncestorBranch(); err != nil {
+		return fmt.Errorf("failed to clean up the ancestor branch: %w", err)
+	}
+
 	if err := opts.runAlphaGenerate(tempDir, cliVersion); err != nil {
 		return fmt.Errorf("failed to run alpha generate on ancestor branch: %w", err)
 	}
@@ -128,6 +132,28 @@ func (opts *Update) checkoutAncestorBranch() error {
 	return nil
 }
 
+func (opts *Update) cleanUpAncestorBranch() error {
+	cmd := exec.Command("rm", "-fr", ".")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to clean up the ancestor branch: %w", err)
+	}
+	log.Info("Succesfully cleaned up the ancestor branch")
+
+	gitCmd := exec.Command("git", "add", ".")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to stage the cleanup: %w", err)
+	}
+	log.Info("Succesfully staged the cleanup on ancestor")
+
+	gitCmd = exec.Command("git", "commit", "-m", "Clean up the ancestor branch")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit the cleanup in ancestor branch: %w", err)
+	}
+	log.Info("Succesfully committed cleanup on ancestor")
+
+	return nil
+}
+
 func (opts *Update) runAlphaGenerate(tempDir, version string) error {
 	tempBinaryPath := tempDir + "/kubebuilder"
 
@@ -148,12 +174,18 @@ func (opts *Update) runAlphaGenerate(tempDir, version string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
+	gitCmd := exec.Command("git", "checkout", "master", "--", "PROJECT")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout PROJECT from master")
+	}
+	log.Info("Succesfully checked out the PROJECT file from master branch")
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run alpha generate: %w", err)
 	}
 	log.Info("Successfully ran alpha generate using Kubebuilder ", version)
 
-	gitCmd := exec.Command("git", "add", ".")
+	gitCmd = exec.Command("git", "add", ".")
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to stage changes in ancestor: %w", err)
 	}
