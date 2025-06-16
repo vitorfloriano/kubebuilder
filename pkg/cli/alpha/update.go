@@ -1,3 +1,16 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+	http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package alpha
 
 import (
@@ -20,33 +33,30 @@ func NewUpdateCommand() *cobra.Command {
 	updateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "Update a Kubebuilder project to a newer version",
-		Long: `Update a Kubebuilder project to a newer version using a three-way merge strategy.
+		Long: `This command upgrades your Kubebuilder project to the latest scaffold layout using a 3-way merge strategy.
 
-This command helps you upgrade your Kubebuilder project by:
-1. Creating a clean ancestor branch with the old version's scaffolding
-2. Creating a current branch with your project's current state
-3. Creating an upgrade branch with the new version's scaffolding
-4. Attempting to merge the changes automatically
+It performs the following steps:
+  1. Creates an 'ancestor' branch from the version originally used to scaffold the project
+  2. Creates a 'current' branch with your project's current state
+  3. Creates an 'upgrade' branch using the new version's scaffolding
+  4. Attempts a 3-way merge into a 'merge' branch
 
-The process creates several Git branches to help you manage the upgrade:
-- ancestor: Clean scaffolding from the original version
-- current: Your project's current state
-- upgrade: Clean scaffolding from the new version
-- merge: Attempted automatic merge of upgrade into current
+The process uses Git branches:
+  - ancestor: clean scaffold from the original version
+  - current: your existing project state
+  - upgrade: scaffold from the target version
+  - merge: result of the 3-way merge
 
-If conflicts occur during the merge, you'll need to resolve them manually.
+If conflicts occur during the merge, resolve them manually in the 'merge' branch. 
+Once resolved, commit and push it as a pull request. This branch will contain the 
+final upgraded project with the latest Kubebuilder layout and your custom code.
 
 Examples:
   # Update using the version specified in PROJECT file
   kubebuilder alpha update
 
   # Update from a specific version
-  kubebuilder alpha update --from-version v3.0.0
-
-Requirements:
-- Must be run from the root of a Kubebuilder project
-- Git repository must be clean (no uncommitted changes)
-- PROJECT file must exist and contain a valid layout version`,
+  kubebuilder alpha update --from-version v3.0.0`,
 
 		// TODO: Add validation to ensure we're in a Kubebuilder project and Git repo is clean
 		//	PreRunE: func(_ *cobra.Command, _ []string) error {
@@ -62,7 +72,7 @@ Requirements:
 
 	// Flag to override the version specified in the PROJECT file
 	updateCmd.Flags().StringVar(&opts.FromVersion, "from-version", "",
-		"Override the CLI version from PROJECT file. Specify the Kubebuilder version to upgrade from (e.g., 'v3.0.0' or '3.0.0')")
+		"Kubebuilder binary release version to upgrade from. Should match the version used to init the project.")
 
 	return updateCmd
 }

@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/kubebuilder/v4/pkg/cli/alpha/internal"
 )
 
-// NewScaffoldCommand returns a new scaffold command, providing the `kubebuilder alpha generate`
+// NewGenerateCommand returns a new scaffold command, providing the `kubebuilder alpha generate`
 // feature to re-scaffold projects and assist users with updates.
 //
 // IMPORTANT: This command is intended solely for Kubebuilder's use, as it is designed to work

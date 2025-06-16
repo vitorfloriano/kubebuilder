@@ -1,3 +1,19 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package internal
 
 import (
@@ -11,6 +27,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
+	"sigs.k8s.io/kubebuilder/v4/pkg/config/store"
 	"sigs.k8s.io/kubebuilder/v4/pkg/config/store/yaml"
 	"sigs.k8s.io/kubebuilder/v4/pkg/machinery"
 )
@@ -20,6 +37,8 @@ type Update struct {
 	// FromVersion specifies which version of Kubebuilder to use for the update.
 	// If empty, the version from the PROJECT file will be used.
 	FromVersion string
+	// CliVersion holds the version to be used during the upgrade process
+	CliVersion string
 }
 
 // Update performs a complete project update by creating a three-way merge to help users
@@ -29,31 +48,19 @@ type Update struct {
 // - upgrade: New Kubebuilder version scaffolding
 // - merge: Attempts to merge upgrade changes into current state
 func (opts *Update) Update() error {
-	// Load the PROJECT configuration file to get the current CLI version
-	projectConfigFile := yaml.New(machinery.Filesystem{FS: afero.NewOsFs()})
-	if err := projectConfigFile.LoadFrom(yaml.DefaultPath); err != nil { // TODO: assess if DefaultPath could be renamed to a more self-descriptive name
-		return fmt.Errorf("fail to run command: %w", err)
-	}
+	// Load the PROJECT configuration file
+	projectConfigFile, _ := opts.loadConfigFile()
+
+	// Extract the cliVersion field from the PROJECT file
+	opts.CliVersion = projectConfigFile.Config().GetCliVersion()
 
 	// Determine which Kubebuilder version to use for the update
-	cliVersion := projectConfigFile.Config().GetCliVersion()
-
-	// Allow override of the version from PROJECT file via command line flag
-	if opts.FromVersion != "" {
-		// Ensure version has 'v' prefix for consistency with GitHub releases
-		if !strings.HasPrefix(opts.FromVersion, "v") {
-			opts.FromVersion = "v" + opts.FromVersion
-		}
-		log.Infof("Overriding cliVersion field %s from PROJECT file with --from-version %s", cliVersion, opts.FromVersion)
-		cliVersion = opts.FromVersion
-	} else {
-		log.Infof("Using CLI version from PROJECT file: %s", cliVersion)
-	}
+	opts.defineFromVersion()
 
 	// Download the specific Kubebuilder binary version for generating clean scaffolding
-	tempDir, err := opts.downloadKubebuilderBinary(cliVersion)
+	tempDir, err := opts.downloadKubebuilderBinary()
 	if err != nil {
-		return fmt.Errorf("failed to download Kubebuilder %s binary: %w", cliVersion, err)
+		return fmt.Errorf("failed to download Kubebuilder %s binary: %w", opts.CliVersion, err)
 	}
 	log.Infof("Downloaded binary kept at %s for debugging purposes", tempDir)
 
@@ -68,7 +75,7 @@ func (opts *Update) Update() error {
 	}
 
 	// Generate clean scaffolding using the old Kubebuilder version
-	if err := opts.runAlphaGenerate(tempDir, cliVersion); err != nil {
+	if err := opts.runAlphaGenerate(tempDir, opts.CliVersion); err != nil {
 		return fmt.Errorf("failed to run alpha generate on ancestor branch: %w", err)
 	}
 
@@ -95,21 +102,41 @@ func (opts *Update) Update() error {
 	return nil
 }
 
+// Load the PROJECT configuration file to get the current CLI version
+func (opts *Update) loadConfigFile() (store.Store, error) {
+	projectConfigFile := yaml.New(machinery.Filesystem{FS: afero.NewOsFs()})
+	// TODO: assess if DefaultPath could be renamed to a more self-descriptive name
+	if err := projectConfigFile.LoadFrom(yaml.DefaultPath); err != nil {
+		return projectConfigFile, fmt.Errorf("fail to run command: %w", err)
+	}
+	return projectConfigFile, nil
+}
+
+// Define the version of the binary to be downloaded
+func (opts *Update) defineFromVersion() {
+	// Allow override of the version from PROJECT file via command line flag
+	if opts.FromVersion != "" {
+		// Ensure version has 'v' prefix for consistency with GitHub releases
+		if !strings.HasPrefix(opts.FromVersion, "v") {
+			opts.FromVersion = "v" + opts.FromVersion
+		}
+		opts.CliVersion = opts.FromVersion
+	}
+}
+
 // downloadKubebuilderBinary downloads the specified version of Kubebuilder binary
 // from GitHub releases and saves it to a temporary directory with executable permissions.
 // Returns the temporary directory path containing the binary.
-func (opts *Update) downloadKubebuilderBinary(version string) (string, error) {
-	cliVersion := version
-
+func (opts *Update) downloadKubebuilderBinary() (string, error) {
 	// Construct GitHub release URL based on current OS and architecture
 	url := fmt.Sprintf("https://github.com/kubernetes-sigs/kubebuilder/releases/download/%s/kubebuilder_%s_%s",
-		cliVersion, runtime.GOOS, runtime.GOARCH)
+		opts.CliVersion, runtime.GOOS, runtime.GOARCH)
 
-	log.Infof("Downloading the Kubebuilder %s binary from: %s", cliVersion, url)
+	log.Infof("Downloading the Kubebuilder %s binary from: %s", opts.CliVersion, url)
 
 	// Create temporary directory for storing the downloaded binary
 	fs := afero.NewOsFs()
-	tempDir, err := afero.TempDir(fs, "", "kubebuilder"+cliVersion+"-")
+	tempDir, err := afero.TempDir(fs, "", "kubebuilder"+opts.CliVersion+"-")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
@@ -120,14 +147,22 @@ func (opts *Update) downloadKubebuilderBinary(version string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create the binary file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err = file.Close(); err != nil {
+			log.Errorf("failed to close the file: %v", err)
+		}
+	}()
 
 	// Download the binary from GitHub releases
 	response, err := http.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("failed to download the binary: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err = response.Body.Close(); err != nil {
+			log.Errorf("failed to close the connection: %v", err)
+		}
+	}()
 
 	// Check if download was successful
 	if response.StatusCode != http.StatusOK {
@@ -141,11 +176,11 @@ func (opts *Update) downloadKubebuilderBinary(version string) (string, error) {
 	}
 
 	// Make the binary executable
-	if err := os.Chmod(binaryPath, 0755); err != nil {
+	if err := os.Chmod(binaryPath, 0o755); err != nil {
 		return "", fmt.Errorf("failed to make binary executable: %w", err)
 	}
 
-	log.Infof("Kubebuilder version %s succesfully downloaded to %s", cliVersion, binaryPath)
+	log.Infof("Kubebuilder version %s successfully downloaded to %s", opts.CliVersion, binaryPath)
 
 	return tempDir, nil
 }
@@ -195,19 +230,27 @@ func (opts *Update) cleanUpAncestorBranch() error {
 // to create clean scaffolding in the ancestor branch. This uses the downloaded
 // binary with the original PROJECT file to recreate the project's initial state.
 func (opts *Update) runAlphaGenerate(tempDir, version string) error {
-	tempBinaryPath := tempDir + "/kubebuilder"
+	// Restore the original PROJECT file from master branch to ensure
+	// we're using the correct project configuration for scaffolding
+	gitCmd := exec.Command("git", "checkout", "master", "--", "PROJECT")
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout PROJECT from master")
+	}
+	log.Info("Successfully checked out the PROJECT file from master branch")
 
 	// Temporarily modify PATH to use the downloaded Kubebuilder binary
+	tempBinaryPath := tempDir + "/kubebuilder"
 	originalPath := os.Getenv("PATH")
 	tempEnvPath := tempDir + ":" + originalPath
 
 	if err := os.Setenv("PATH", tempEnvPath); err != nil {
 		return fmt.Errorf("failed to set temporary PATH: %w", err)
 	}
+
 	// Restore original PATH when function completes
 	defer func() {
 		if err := os.Setenv("PATH", originalPath); err != nil {
-			log.Errorf("failed to restore original PATH: %w", err)
+			log.Errorf("failed to restore original PATH: %v", err)
 		}
 	}()
 
@@ -219,11 +262,11 @@ func (opts *Update) runAlphaGenerate(tempDir, version string) error {
 
 	// Restore the original PROJECT file from master branch to ensure
 	// we're using the correct project configuration for scaffolding
-	gitCmd := exec.Command("git", "checkout", "master", "--", "PROJECT")
+	gitCmd = exec.Command("git", "checkout", "master", "--", "PROJECT")
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to checkout PROJECT from master")
 	}
-	log.Info("Succesfully checked out the PROJECT file from master branch")
+	log.Info("Successfully checked out the PROJECT file from master branch")
 
 	// Execute the alpha generate command to create clean scaffolding
 	if err := cmd.Run(); err != nil {
@@ -243,7 +286,7 @@ func (opts *Update) runAlphaGenerate(tempDir, version string) error {
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to commit changes in ancestor: %w", err)
 	}
-	log.Info("Successfully commited changes in ancestor")
+	log.Info("Successfully committed changes in ancestor")
 
 	return nil
 }
@@ -278,7 +321,7 @@ func (opts *Update) checkoutCurrentOffAncestor() error {
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to commit changes: %w", err)
 	}
-	log.Info("Successfully commited changes in current")
+	log.Info("Successfully committed changes in current")
 
 	return nil
 }
@@ -317,7 +360,7 @@ func (opts *Update) checkoutUpgradeOffAncestor() error {
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("failed to commit changes in upgrade branch: %w", err)
 	}
-	log.Info("Successfully commited changes in upgrade branch")
+	log.Info("Successfully committed changes in upgrade branch")
 
 	return nil
 }
