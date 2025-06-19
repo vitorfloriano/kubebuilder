@@ -58,10 +58,9 @@ Examples:
   # Update from a specific version
   kubebuilder alpha update --from-version v3.0.0`,
 
-		// TODO: Add validation to ensure we're in a Kubebuilder project and Git repo is clean
-		//	PreRunE: func(_ *cobra.Command, _ []string) error {
-		//		return opts.Validate()
-		//	},
+		PreRunE: func(_ *cobra.Command, _ []string) error {
+			return opts.Validate()
+		},
 
 		Run: func(_ *cobra.Command, _ []string) {
 			if err := opts.Update(); err != nil {
