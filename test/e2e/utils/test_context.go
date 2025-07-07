@@ -215,6 +215,15 @@ func (t *TestContext) Regenerate(resourceOptions ...string) error {
 	return err
 }
 
+// AlphaUpdate is for running `kubebuilder alpha update`
+func (t *TestContext) AlphaUpdate(updateOptions ...string) error {
+	updateOptions = append([]string{"alpha", "update"}, updateOptions...)
+	//nolint:gosec
+	cmd := exec.Command(t.BinaryName, updateOptions...)
+	_, err := t.Run(cmd)
+	return err
+}
+
 // Make is for running `make` with various targets
 func (t *TestContext) Make(makeOptions ...string) error {
 	cmd := exec.Command("make", makeOptions...)
