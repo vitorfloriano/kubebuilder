@@ -36,51 +36,53 @@ const (
 	customControllerMarker = "// CUSTOM_CONTROLLER_CODE: This is custom controller code"
 )
 
-var _ = Describe("kubebuilder alpha update", func() {
-	var (
-		kbc           *utils.TestContext
-		oldBinaryPath string
-	)
+var _ = Describe("kubebuilder", func() {
+	Context("alpha update", func() {
+		var (
+			kbc           *utils.TestContext
+			oldBinaryPath string
+		)
 
-	BeforeEach(func() {
-		By("downloading old kubebuilder version")
-		var err error
-		oldBinaryPath, err = utils.DownloadKubebuilderBinary(fromVersion)
-		Expect(err).NotTo(HaveOccurred())
+		BeforeEach(func() {
+			By("downloading old kubebuilder version")
+			var err error
+			oldBinaryPath, err = utils.DownloadKubebuilderBinary(fromVersion)
+			Expect(err).NotTo(HaveOccurred())
 
-		By("setting up test context")
-		kbc, err = utils.NewTestContext(pluginutil.KubebuilderBinName, "GO111MODULE=on")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(kbc.Prepare()).To(Succeed())
-	})
+			By("setting up test context")
+			kbc, err = utils.NewTestContext(pluginutil.KubebuilderBinName, "GO111MODULE=on")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(kbc.Prepare()).To(Succeed())
+		})
 
-	AfterEach(func() {
-		if kbc != nil {
-			kbc.Destroy()
-		}
-		if oldBinaryPath != "" {
-			_ = utils.CleanupBinary(oldBinaryPath)
-		}
-	})
+		AfterEach(func() {
+			if kbc != nil {
+				kbc.Destroy()
+			}
+			if oldBinaryPath != "" {
+				_ = utils.CleanupBinary(oldBinaryPath)
+			}
+		})
 
-	It("should upgrade a basic project preserving custom code", func() {
-		By("initializing git repository")
-		initGitRepo(kbc)
+		It("should upgrade a basic project preserving custom code", func() {
+			By("initializing git repository")
+			initGitRepo(kbc)
 
-		By("creating project with old kubebuilder version")
-		createProjectWithOldVersion(kbc, oldBinaryPath)
+			By("creating project with old kubebuilder version")
+			createProjectWithOldVersion(kbc, oldBinaryPath)
 
-		By("adding custom code to generated files")
-		addCustomCode(kbc)
+			By("adding custom code to generated files")
+			addCustomCode(kbc)
 
-		By("committing initial state")
-		commitChanges(kbc, "Initial project with custom code")
+			By("committing initial state")
+			commitChanges(kbc, "Initial project with custom code")
 
-		By("running alpha update command")
-		Expect(kbc.AlphaUpdate("--from-version", fromVersion)).To(Succeed())
+			By("running alpha update command")
+			Expect(kbc.AlphaUpdate("--from-version", fromVersion)).To(Succeed())
 
-		By("verifying custom code is preserved")
-		verifyCustomCodePreserved(kbc)
+			By("verifying custom code is preserved")
+			verifyCustomCodePreserved(kbc)
+		})
 	})
 })
 
