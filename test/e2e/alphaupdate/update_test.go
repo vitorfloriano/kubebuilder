@@ -59,7 +59,7 @@ var _ = Describe("kubebuilder alpha update", func() {
 			kbc.Destroy()
 		}
 		if oldBinaryPath != "" {
-			_ = utils.CleanupBinary(oldBinaryPath) // Fix errcheck: explicitly ignore error
+			_ = utils.CleanupBinary(oldBinaryPath)
 		}
 	})
 
@@ -84,7 +84,6 @@ var _ = Describe("kubebuilder alpha update", func() {
 	})
 })
 
-// Helper functions - keep them simple for now
 func addCustomCode(kbc *utils.TestContext) {
 	// Add custom code to API types
 	apiFile := filepath.Join(kbc.Dir, "api", kbc.Version,
@@ -93,7 +92,6 @@ func addCustomCode(kbc *utils.TestContext) {
 	content, err := os.ReadFile(apiFile)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Look for the specific struct definition line
 	structPattern := fmt.Sprintf("type %sSpec struct {", kbc.Kind)
 	if !strings.Contains(string(content), structPattern) {
 		Fail(fmt.Sprintf("Could not find struct definition '%s' in API file", structPattern))
@@ -111,7 +109,6 @@ func addCustomCode(kbc *utils.TestContext) {
 	content, err = os.ReadFile(controllerFile)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Look for the Reconcile function specifically
 	reconcilePattern := fmt.Sprintf("func (r *%sReconciler) Reconcile(", kbc.Kind)
 	if !strings.Contains(string(content), reconcilePattern) {
 		Fail(fmt.Sprintf("Could not find Reconcile function '%s' in controller file", reconcilePattern))
@@ -124,12 +121,10 @@ func addCustomCode(kbc *utils.TestContext) {
 }
 
 func createProjectWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
-	// Temporarily switch binary
 	originalBinary := kbc.BinaryName
 	kbc.BinaryName = oldBinaryPath
 	defer func() { kbc.BinaryName = originalBinary }()
 
-	// Fix ginkgolinter: Use simpler version check approach
 	cmd := exec.Command(oldBinaryPath, "version")
 	cmd.Dir = kbc.Dir
 	cmd.Env = kbc.Env
@@ -152,13 +147,11 @@ func createProjectWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
 	Expect(kbc.Tidy()).To(Succeed())
 }
 
-// Improved git operations
 func initGitRepo(kbc *utils.TestContext) {
 	git := utils.NewGitHelper(kbc.Dir, kbc.Env)
 	Expect(git.Init()).To(Succeed())
 	Expect(git.ConfigUser("Test User", "test@example.com")).To(Succeed())
 
-	// Check if we need to create main branch (newer git versions default to main)
 	if currentBranch, err := git.GetCurrentBranch(); err != nil || currentBranch != "main" {
 		Expect(git.CheckoutNewBranch("main")).To(Succeed())
 	}
@@ -171,7 +164,6 @@ func commitChanges(kbc *utils.TestContext, message string) {
 }
 
 func verifyCustomCodePreserved(kbc *utils.TestContext) {
-	// Simple file content checks - no kubectl needed!
 	apiFile := filepath.Join(kbc.Dir, "api", kbc.Version,
 		fmt.Sprintf("%s_types.go", strings.ToLower(kbc.Kind)))
 

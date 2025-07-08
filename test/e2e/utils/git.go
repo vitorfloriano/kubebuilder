@@ -35,7 +35,6 @@ func NewGitHelper(dir string, env []string) *GitHelper {
 	}
 }
 
-// run executes a git command in the helper's directory
 func (g *GitHelper) run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = g.dir
@@ -44,13 +43,11 @@ func (g *GitHelper) run(args ...string) (string, error) {
 	return string(output), err
 }
 
-// Init initializes a new git repository
 func (g *GitHelper) Init() error {
 	_, err := g.run("init")
 	return err
 }
 
-// ConfigUser sets the git user name and email for commits
 func (g *GitHelper) ConfigUser(name, email string) error {
 	if _, err := g.run("config", "user.name", name); err != nil {
 		return err
@@ -59,26 +56,22 @@ func (g *GitHelper) ConfigUser(name, email string) error {
 	return err
 }
 
-// Add stages files for commit
 func (g *GitHelper) Add(files ...string) error {
 	args := append([]string{"add"}, files...)
 	_, err := g.run(args...)
 	return err
 }
 
-// Commit creates a new commit with the given message
 func (g *GitHelper) Commit(message string) error {
 	_, err := g.run("commit", "-m", message)
 	return err
 }
 
-// CheckoutNewBranch creates and switches to a new branch
 func (g *GitHelper) CheckoutNewBranch(branch string) error {
 	_, err := g.run("checkout", "-b", branch)
 	return err
 }
 
-// GetCurrentBranch returns the current git branch name
 func (g *GitHelper) GetCurrentBranch() (string, error) {
 	output, err := g.run("rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
