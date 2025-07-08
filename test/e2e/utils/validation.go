@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/kubebuilder/v4/pkg/model/resource"
 	"sigs.k8s.io/kubebuilder/v4/pkg/plugins/golang/deploy-image/v1alpha1"
 
+	//nolint:staticcheck
 	. "github.com/onsi/gomega"
 )
 
@@ -54,8 +55,11 @@ func NewProjectValidator(projectPath string) (*ProjectValidator, error) {
 // ValidateBasicProjectStructure validates basic project structure after update
 func (v *ProjectValidator) ValidateBasicProjectStructure(kbc *TestContext) {
 	ExpectWithOffset(1, v.config.GetDomain()).To(Equal(kbc.Domain), "Domain should be preserved")
-	ExpectWithOffset(1, v.config.GetRepository()).To(ContainSubstring(kbc.TestSuffix), "Repository should contain test suffix")
-	ExpectWithOffset(1, v.config.GetPluginChain()).To(ContainElement("go.kubebuilder.io/v4"), "Should have Go v4 plugin")
+	// Split long line to comply with lll (line length limit)
+	ExpectWithOffset(1, v.config.GetRepository()).To(
+		ContainSubstring(kbc.TestSuffix), "Repository should contain test suffix")
+	ExpectWithOffset(1, v.config.GetPluginChain()).To(
+		ContainElement("go.kubebuilder.io/v4"), "Should have Go v4 plugin")
 }
 
 // ValidateResourcePreservation validates that all resources are preserved after update
@@ -135,7 +139,7 @@ func (v *ProjectValidator) ValidateHelmPlugin() {
 }
 
 // ValidateCustomCodePreservation validates that custom code markers are preserved
-func (v *ProjectValidator) ValidateCustomCodePreservation(kbc *TestContext, customMarkers map[string]string) {
+func (v *ProjectValidator) ValidateCustomCodePreservation(_ *TestContext, customMarkers map[string]string) {
 	for filePath, marker := range customMarkers {
 		fullPath := filepath.Join(filepath.Dir(v.projectPath), filePath)
 		content, err := os.ReadFile(fullPath)
@@ -230,7 +234,8 @@ func (c *CodeInjector) injectCodeIntoFile(filePath, customCode, beforeLine strin
 	}
 
 	lines := strings.Split(string(content), "\n")
-	var newLines []string
+	// Pre-allocate slice with capacity to avoid reallocation (prealloc fix)
+	newLines := make([]string, 0, len(lines)+1)
 
 	for _, line := range lines {
 		if strings.Contains(line, beforeLine) {

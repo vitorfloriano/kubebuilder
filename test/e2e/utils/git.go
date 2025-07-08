@@ -38,36 +38,36 @@ func NewGitHelper(dir string, env []string) *GitHelper {
 
 // Init initializes a git repository in the test directory
 func (g *GitHelper) Init() error {
-	return g.runCommand("git", "init")
+	return g.runCommand("init")
 }
 
 // ConfigUser configures git user for the test repository
 func (g *GitHelper) ConfigUser(name, email string) error {
-	if err := g.runCommand("git", "config", "user.name", name); err != nil {
+	if err := g.runCommand("config", "user.name", name); err != nil {
 		return err
 	}
-	return g.runCommand("git", "config", "user.email", email)
+	return g.runCommand("config", "user.email", email)
 }
 
 // Add adds files to the git staging area
 func (g *GitHelper) Add(files ...string) error {
 	args := append([]string{"add"}, files...)
-	return g.runCommand("git", args...)
+	return g.runCommand(args...)
 }
 
 // Commit commits changes with the specified message
 func (g *GitHelper) Commit(message string) error {
-	return g.runCommand("git", "commit", "-m", message)
+	return g.runCommand("commit", "-m", message)
 }
 
 // Checkout checks out to a specific branch
 func (g *GitHelper) Checkout(branch string) error {
-	return g.runCommand("git", "checkout", branch)
+	return g.runCommand("checkout", branch)
 }
 
 // CheckoutNewBranch creates and checks out a new branch
 func (g *GitHelper) CheckoutNewBranch(branch string) error {
-	return g.runCommand("git", "checkout", "-b", branch)
+	return g.runCommand("checkout", "-b", branch)
 }
 
 // GetCurrentBranch returns the current branch name
@@ -126,14 +126,14 @@ func (g *GitHelper) Status() (string, error) {
 }
 
 // runCommand executes a git command in the test directory
-func (g *GitHelper) runCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+func (g *GitHelper) runCommand(args ...string) error {
+	cmd := exec.Command("git", args...)
 	cmd.Dir = g.dir
 	cmd.Env = g.env
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("command %s failed: %w\nOutput: %s", name, err, string(output))
+		return fmt.Errorf("git command failed: %w\nOutput: %s", err, string(output))
 	}
 	return nil
 }

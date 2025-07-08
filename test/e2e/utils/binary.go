@@ -50,13 +50,19 @@ func DownloadKubebuilderBinary(version string) (string, error) {
 		return "", fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
 
-	url := fmt.Sprintf("https://github.com/kubernetes-sigs/kubebuilder/releases/download/%s/kubebuilder_%s", version, platform)
+	url := fmt.Sprintf("https://github.com/kubernetes-sigs/kubebuilder/releases/download/%s/kubebuilder_%s",
+		version, platform)
 
 	resp, err := http.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("failed to download binary: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			// Log the error but don't override the main error
+			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to download binary: HTTP %d", resp.StatusCode)
@@ -66,7 +72,12 @@ func DownloadKubebuilderBinary(version string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create binary file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			// Log the error but don't override the main error
+			fmt.Printf("Warning: failed to close file: %v\n", closeErr)
+		}
+	}()
 
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
@@ -86,5 +97,8 @@ func CleanupBinary(binaryPath string) error {
 	if binaryPath == "" {
 		return nil
 	}
-	return os.RemoveAll(filepath.Dir(binaryPath))
+	if err := os.RemoveAll(filepath.Dir(binaryPath)); err != nil {
+		return fmt.Errorf("failed to remove binary directory: %w", err)
+	}
+	return nil
 }

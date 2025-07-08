@@ -18,16 +18,13 @@ package alphaupdate
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"sigs.k8s.io/kubebuilder/v4/pkg/model/resource"
 	pluginutil "sigs.k8s.io/kubebuilder/v4/pkg/plugin/util"
-	"sigs.k8s.io/kubebuilder/v4/pkg/plugins/golang/deploy-image/v1alpha1"
 	"sigs.k8s.io/kubebuilder/v4/test/e2e/utils"
 )
 
@@ -63,11 +60,17 @@ var _ = Describe("kubebuilder alpha update", func() {
 		})
 
 		AfterEach(func() {
-			if kbc != nil {
-				kbc.Destroy()
+			By("cleaning up downloaded binary")
+			if oldBinaryPath != "" {
+				err := utils.CleanupBinary(oldBinaryPath)
+				if err != nil {
+					// Log the error but don't fail the test during cleanup
+					_, _ = fmt.Fprintf(GinkgoWriter, "Warning: failed to cleanup binary: %v\n", err)
+				}
 			}
-			// Clean up old binary
-			utils.CleanupBinary(oldBinaryPath)
+
+			By("destroying test directory")
+			kbc.Destroy()
 		})
 
 		It("should successfully upgrade project from previous version preserving custom code", func() {
@@ -87,7 +90,7 @@ var _ = Describe("kubebuilder alpha update", func() {
 			runAlphaUpdateWithFromVersion(kbc, fromVersion)
 
 			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc, injector)
+			verifyCustomCodePreservation(kbc)
 
 			By("verifying project state after update")
 			verifyUpdateOutcome(kbc, git)
@@ -116,7 +119,7 @@ var _ = Describe("kubebuilder alpha update", func() {
 			runAlphaUpdateWithFromBranch(kbc, "feature-branch", fromVersion)
 
 			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc, injector)
+			verifyCustomCodePreservation(kbc)
 
 			By("verifying project state after update")
 			verifyUpdateOutcome(kbc, git)
@@ -139,7 +142,7 @@ var _ = Describe("kubebuilder alpha update", func() {
 			runAlphaUpdateWithToVersion(kbc, fromVersion, "v4.6.0")
 
 			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc, injector)
+			verifyCustomCodePreservation(kbc)
 
 			By("verifying project state after update")
 			verifyUpdateOutcome(kbc, git)
@@ -162,7 +165,7 @@ var _ = Describe("kubebuilder alpha update", func() {
 			runAlphaUpdateWithToVersion(kbc, fromVersion, "v4.6.0")
 
 			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc, injector)
+			verifyCustomCodePreservation(kbc)
 
 			By("verifying project state after update")
 			verifyUpdateOutcome(kbc, git)
@@ -191,17 +194,6 @@ func scaffoldProjectWithOldVersion(kbc *utils.TestContext, oldBinaryPath string)
 	Expect(kbc.Tidy()).To(Succeed())
 }
 
-// scaffoldMultigroupProjectWithOldVersion scaffolds a multigroup project using the old kubebuilder version
-func scaffoldMultigroupProjectWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
-	scaffoldProjectWithOldVersion(kbc, oldBinaryPath)
-
-	editArgs := []string{
-		"edit",
-		"--multigroup", "true",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, editArgs...)).To(Succeed())
-}
-
 // createAPIWithOldVersion creates an API using the old kubebuilder version
 func createAPIWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
 	apiArgs := []string{
@@ -214,91 +206,6 @@ func createAPIWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
 	}
 	Expect(runCommandWithBinary(kbc, oldBinaryPath, apiArgs...)).To(Succeed())
 	Expect(kbc.Tidy()).To(Succeed())
-}
-
-// createAPIWithDeployImagePlugin creates an API using the DeployImage plugin with old version
-func createAPIWithDeployImagePlugin(kbc *utils.TestContext, oldBinaryPath string) {
-	apiArgs := []string{
-		"create", "api",
-		"--group", kbc.Group,
-		"--version", kbc.Version,
-		"--kind", kbc.Kind,
-		"--image=memcached:1.6.15-alpine",
-		"--image-container-command=memcached,--memory-limit=64,modern,-v",
-		"--image-container-port=11211",
-		"--run-as-user=1001",
-		"--plugins=deploy-image/v1-alpha",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, apiArgs...)).To(Succeed())
-	Expect(kbc.Tidy()).To(Succeed())
-}
-
-// createMultipleAPIsWithWebhooks creates multiple APIs with webhooks for complex testing
-func createMultipleAPIsWithWebhooks(kbc *utils.TestContext, oldBinaryPath string) {
-	// Create first API with controller and webhooks
-	apiArgs1 := []string{
-		"create", "api",
-		"--group", kbc.Group,
-		"--version", kbc.Version,
-		"--kind", kbc.Kind,
-		"--resource",
-		"--controller",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, apiArgs1...)).To(Succeed())
-
-	// Create webhook for first API
-	webhookArgs1 := []string{
-		"create", "webhook",
-		"--group", kbc.Group,
-		"--version", kbc.Version,
-		"--kind", kbc.Kind,
-		"--defaulting",
-		"--programmatic-validation",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, webhookArgs1...)).To(Succeed())
-
-	// Create second API with different group
-	apiArgs2 := []string{
-		"create", "api",
-		"--group", "crew",
-		"--version", "v1",
-		"--kind", "Captain",
-		"--resource",
-		"--controller",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, apiArgs2...)).To(Succeed())
-
-	// Create third API without controller
-	apiArgs3 := []string{
-		"create", "api",
-		"--group", "crew",
-		"--version", "v1",
-		"--kind", "Admiral",
-		"--resource",
-		"--controller=false",
-		"--namespaced=false",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, apiArgs3...)).To(Succeed())
-
-	Expect(kbc.Tidy()).To(Succeed())
-}
-
-// enableGrafanaPlugin enables the Grafana plugin using old version
-func enableGrafanaPlugin(kbc *utils.TestContext, oldBinaryPath string) {
-	editArgs := []string{
-		"edit",
-		"--plugins", "grafana.kubebuilder.io/v1-alpha",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, editArgs...)).To(Succeed())
-}
-
-// enableHelmPlugin enables the Helm plugin using old version
-func enableHelmPlugin(kbc *utils.TestContext, oldBinaryPath string) {
-	editArgs := []string{
-		"edit",
-		"--plugins", "helm.kubebuilder.io/v1-alpha",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, editArgs...)).To(Succeed())
 }
 
 // injectAndCommitCustomCode injects custom code and commits the changes
@@ -341,7 +248,7 @@ func runAlphaUpdateWithToVersion(kbc *utils.TestContext, fromVersion, toVersion 
 // Validation functions
 
 // verifyCustomCodePreservation verifies that custom code markers are preserved
-func verifyCustomCodePreservation(kbc *utils.TestContext, injector *utils.CodeInjector) {
+func verifyCustomCodePreservation(kbc *utils.TestContext) {
 	const (
 		customAPIMarker        = "// CUSTOM_API_CODE: This is custom API code"
 		customControllerMarker = "// CUSTOM_CONTROLLER_CODE: This is custom controller code"
@@ -351,93 +258,12 @@ func verifyCustomCodePreservation(kbc *utils.TestContext, injector *utils.CodeIn
 	Expect(err).NotTo(HaveOccurred())
 
 	customMarkers := map[string]string{
-		filepath.Join("api", kbc.Version, fmt.Sprintf("%s_types.go", strings.ToLower(kbc.Kind))):            customAPIMarker,
-		filepath.Join("internal", "controller", fmt.Sprintf("%s_controller.go", strings.ToLower(kbc.Kind))): customControllerMarker,
+		filepath.Join("api", kbc.Version, fmt.Sprintf("%s_types.go", strings.ToLower(kbc.Kind))): customAPIMarker,
+		filepath.Join("internal", "controller", fmt.Sprintf("%s_controller.go",
+			strings.ToLower(kbc.Kind))): customControllerMarker,
 	}
 
 	validator.ValidateCustomCodePreservation(kbc, customMarkers)
-}
-
-// verifyDeployImagePluginPreservation verifies DeployImage plugin configuration is preserved
-func verifyDeployImagePluginPreservation(kbc *utils.TestContext) {
-	validator, err := utils.NewProjectValidator(filepath.Join(kbc.Dir, "PROJECT"))
-	Expect(err).NotTo(HaveOccurred())
-
-	// Note: We validate that the DeployImage plugin configuration exists
-	// The actual validation is done through the validation framework
-	validator.ValidateDeployImagePlugin([]v1alpha1.ResourceData{{
-		Group:   kbc.Group,
-		Kind:    kbc.Kind,
-		Version: kbc.Version,
-		Domain:  kbc.Domain,
-	}})
-}
-
-// verifyGrafanaPluginPreservation verifies Grafana plugin configuration is preserved
-func verifyGrafanaPluginPreservation(kbc *utils.TestContext) {
-	validator, err := utils.NewProjectValidator(filepath.Join(kbc.Dir, "PROJECT"))
-	Expect(err).NotTo(HaveOccurred())
-
-	validator.ValidateGrafanaPlugin()
-}
-
-// verifyHelmPluginPreservation verifies Helm plugin configuration is preserved
-func verifyHelmPluginPreservation(kbc *utils.TestContext) {
-	validator, err := utils.NewProjectValidator(filepath.Join(kbc.Dir, "PROJECT"))
-	Expect(err).NotTo(HaveOccurred())
-
-	validator.ValidateHelmPlugin()
-}
-
-// verifyMultipleResourcesPreservation verifies that multiple resources are preserved
-func verifyMultipleResourcesPreservation(kbc *utils.TestContext) {
-	validator, err := utils.NewProjectValidator(filepath.Join(kbc.Dir, "PROJECT"))
-	Expect(err).NotTo(HaveOccurred())
-
-	expectedResources := []resource.Resource{
-		{
-			GVK: resource.GVK{
-				Group:   kbc.Group,
-				Domain:  kbc.Domain,
-				Version: kbc.Version,
-				Kind:    kbc.Kind,
-			},
-			Controller: true,
-			API: &resource.API{
-				Namespaced: true,
-			},
-			Webhooks: &resource.Webhooks{
-				Defaulting: true,
-				Validation: true,
-			},
-		},
-		{
-			GVK: resource.GVK{
-				Group:   "crew",
-				Domain:  kbc.Domain,
-				Version: "v1",
-				Kind:    "Captain",
-			},
-			Controller: true,
-			API: &resource.API{
-				Namespaced: true,
-			},
-		},
-		{
-			GVK: resource.GVK{
-				Group:   "crew",
-				Domain:  kbc.Domain,
-				Version: "v1",
-				Kind:    "Admiral",
-			},
-			Controller: false,
-			API: &resource.API{
-				Namespaced: false,
-			},
-		},
-	}
-
-	validator.ValidateResourcePreservation(expectedResources)
 }
 
 // verifyUpdateOutcome verifies the overall outcome of the alpha update command
@@ -447,53 +273,6 @@ func verifyUpdateOutcome(kbc *utils.TestContext, git *utils.GitHelper) {
 
 	validator.ValidateUpdateOutcome(kbc, git)
 	validator.ValidateBasicProjectStructure(kbc)
-}
-
-// createAPIWithExternalDependency creates an API with external dependency (e.g., cert-manager)
-func createAPIWithExternalDependency(kbc *utils.TestContext, oldBinaryPath string) {
-	apiArgs := []string{
-		"create", "api",
-		"--group", "certmanager",
-		"--version", "v1",
-		"--kind", "Certificate",
-		"--controller=true",
-		"--resource=false",
-		"--external-api-path=github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1",
-		"--external-api-domain=cert-manager.io",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, apiArgs...)).To(Succeed())
-	Expect(kbc.Tidy()).To(Succeed())
-}
-
-// verifyExternalAPIPreservation verifies that external API configuration is preserved
-func verifyExternalAPIPreservation(kbc *utils.TestContext) {
-	validator, err := utils.NewProjectValidator(filepath.Join(kbc.Dir, "PROJECT"))
-	Expect(err).NotTo(HaveOccurred())
-
-	expectedResources := []resource.Resource{
-		{
-			GVK: resource.GVK{
-				Group:   "certmanager",
-				Domain:  "cert-manager.io",
-				Version: "v1",
-				Kind:    "Certificate",
-			},
-			Controller: true,
-			API:        nil, // External API, no local scaffolding
-			Path:       "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1",
-		},
-	}
-
-	validator.ValidateResourcePreservation(expectedResources)
-}
-
-// createUncommittedChanges creates uncommitted changes for error testing
-func createUncommittedChanges(kbc *utils.TestContext) {
-	// Create a simple uncommitted file
-	testFile := filepath.Join(kbc.Dir, "test-uncommitted.txt")
-	content := "This is an uncommitted change for testing"
-	err := os.WriteFile(testFile, []byte(content), 0o644)
-	Expect(err).NotTo(HaveOccurred())
 }
 
 // Utility functions for command execution with old binary
@@ -506,16 +285,28 @@ func runCommandWithBinary(kbc *utils.TestContext, binaryPath string, args ...str
 
 	switch args[0] {
 	case "init":
-		return kbc.Init(args[1:]...)
+		if err := kbc.Init(args[1:]...); err != nil {
+			return fmt.Errorf("failed to init project: %w", err)
+		}
+		return nil
 	case "create":
 		if len(args) > 1 && args[1] == "api" {
-			return kbc.CreateAPI(args[2:]...)
+			if err := kbc.CreateAPI(args[2:]...); err != nil {
+				return fmt.Errorf("failed to create API: %w", err)
+			}
+			return nil
 		} else if len(args) > 1 && args[1] == "webhook" {
-			return kbc.CreateWebhook(args[2:]...)
+			if err := kbc.CreateWebhook(args[2:]...); err != nil {
+				return fmt.Errorf("failed to create webhook: %w", err)
+			}
+			return nil
 		}
 		return fmt.Errorf("unsupported create command: %v", args)
 	case "edit":
-		return kbc.Edit(args[1:]...)
+		if err := kbc.Edit(args[1:]...); err != nil {
+			return fmt.Errorf("failed to edit project: %w", err)
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported command: %v", args)
 	}
