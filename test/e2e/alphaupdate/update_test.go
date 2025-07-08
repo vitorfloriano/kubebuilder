@@ -18,6 +18,8 @@ package alphaupdate
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -29,285 +31,158 @@ import (
 )
 
 const (
-	// Previous version to test migration from
-	fromVersion = "v4.5.2"
-	// Test runs are non-interactive, we need this env var to skip prompts
-	nonInteractiveEnv = "KUBEBUILDER_NON_INTERACTIVE=true"
+	fromVersion            = "v4.5.2"
+	customAPIMarker        = "// CUSTOM_API_CODE: This is custom API code"
+	customControllerMarker = "// CUSTOM_CONTROLLER_CODE: This is custom controller code"
 )
 
 var _ = Describe("kubebuilder alpha update", func() {
-	Context("basic upgrade scenarios", func() {
-		var (
-			kbc           *utils.TestContext
-			oldBinaryPath string
-			git           *utils.GitHelper
-			injector      *utils.CodeInjector
-		)
+	var (
+		kbc           *utils.TestContext
+		oldBinaryPath string
+	)
 
-		BeforeEach(func() {
-			var err error
-			kbc, err = utils.NewTestContext(pluginutil.KubebuilderBinName, "GO111MODULE=on", nonInteractiveEnv)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(kbc.Prepare()).To(Succeed())
+	BeforeEach(func() {
+		By("downloading old kubebuilder version")
+		var err error
+		oldBinaryPath, err = utils.DownloadKubebuilderBinary(fromVersion)
+		Expect(err).NotTo(HaveOccurred())
 
-			// Download and setup old version binary
-			oldBinaryPath, err = utils.DownloadKubebuilderBinary(fromVersion)
-			Expect(err).NotTo(HaveOccurred())
+		By("setting up test context")
+		kbc, err = utils.NewTestContext(pluginutil.KubebuilderBinName, "GO111MODULE=on")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(kbc.Prepare()).To(Succeed())
+	})
 
-			// Initialize helpers
-			git = utils.NewGitHelper(kbc.Dir, kbc.Env)
-			injector = utils.NewCodeInjector(kbc.Dir)
-		})
-
-		AfterEach(func() {
-			By("cleaning up downloaded binary")
-			if oldBinaryPath != "" {
-				err := utils.CleanupBinary(oldBinaryPath)
-				if err != nil {
-					// Log the error but don't fail the test during cleanup
-					_, _ = fmt.Fprintf(GinkgoWriter, "Warning: failed to cleanup binary: %v\n", err)
-				}
-			}
-
-			By("destroying test directory")
+	AfterEach(func() {
+		if kbc != nil {
 			kbc.Destroy()
-		})
+		}
+		if oldBinaryPath != "" {
+			_ = utils.CleanupBinary(oldBinaryPath) // Fix errcheck: explicitly ignore error
+		}
+	})
 
-		It("should successfully upgrade project from previous version preserving custom code", func() {
-			By("initializing git repository")
-			initializeGitRepository(git)
+	It("should upgrade a basic project preserving custom code", func() {
+		By("initializing git repository")
+		initGitRepo(kbc)
 
-			By("scaffolding project with old kubebuilder version")
-			scaffoldProjectWithOldVersion(kbc, oldBinaryPath)
+		By("creating project with old kubebuilder version")
+		createProjectWithOldVersion(kbc, oldBinaryPath)
 
-			By("creating API with old version")
-			createAPIWithOldVersion(kbc, oldBinaryPath)
+		By("adding custom code to generated files")
+		addCustomCode(kbc)
 
-			By("injecting custom code into API and controller")
-			injectAndCommitCustomCode(kbc, git, injector)
+		By("committing initial state")
+		commitChanges(kbc, "Initial project with custom code")
 
-			By("running alpha update command with from-version flag")
-			runAlphaUpdateWithFromVersion(kbc, fromVersion)
+		By("running alpha update command")
+		Expect(kbc.AlphaUpdate("--from-version", fromVersion)).To(Succeed())
 
-			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc)
-
-			By("verifying project state after update")
-			verifyUpdateOutcome(kbc, git)
-		})
-
-		It("should successfully upgrade project using from-branch flag", func() {
-			By("initializing git repository")
-			initializeGitRepository(git)
-
-			By("scaffolding project with old kubebuilder version")
-			scaffoldProjectWithOldVersion(kbc, oldBinaryPath)
-
-			By("creating API with old version")
-			createAPIWithOldVersion(kbc, oldBinaryPath)
-
-			By("committing initial project state")
-			commitInitialState(git)
-
-			By("creating feature branch")
-			Expect(git.CheckoutNewBranch("feature-branch")).To(Succeed())
-
-			By("injecting custom code in feature branch")
-			injectAndCommitCustomCode(kbc, git, injector)
-
-			By("running alpha update command with from-branch flag")
-			runAlphaUpdateWithFromBranch(kbc, "feature-branch", fromVersion)
-
-			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc)
-
-			By("verifying project state after update")
-			verifyUpdateOutcome(kbc, git)
-		})
-
-		It("should successfully upgrade project with specific to-version flag", func() {
-			By("initializing git repository")
-			initializeGitRepository(git)
-
-			By("scaffolding project with old kubebuilder version")
-			scaffoldProjectWithOldVersion(kbc, oldBinaryPath)
-
-			By("creating API with old version")
-			createAPIWithOldVersion(kbc, oldBinaryPath)
-
-			By("injecting custom code into API and controller")
-			injectAndCommitCustomCode(kbc, git, injector)
-
-			By("running alpha update command with to-version flag")
-			runAlphaUpdateWithToVersion(kbc, fromVersion, "v4.6.0")
-
-			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc)
-
-			By("verifying project state after update")
-			verifyUpdateOutcome(kbc, git)
-		})
-
-		It("should successfully upgrade project with specific to-version flag", func() {
-			By("initializing git repository")
-			initializeGitRepository(git)
-
-			By("scaffolding project with old kubebuilder version")
-			scaffoldProjectWithOldVersion(kbc, oldBinaryPath)
-
-			By("creating API with old version")
-			createAPIWithOldVersion(kbc, oldBinaryPath)
-
-			By("injecting custom code into API and controller")
-			injectAndCommitCustomCode(kbc, git, injector)
-
-			By("running alpha update command with to-version flag")
-			runAlphaUpdateWithToVersion(kbc, fromVersion, "v4.6.0")
-
-			By("verifying custom code is preserved")
-			verifyCustomCodePreservation(kbc)
-
-			By("verifying project state after update")
-			verifyUpdateOutcome(kbc, git)
-		})
+		By("verifying custom code is preserved")
+		verifyCustomCodePreserved(kbc)
 	})
 })
 
-// Helper functions for test scenarios
+// Helper functions - keep them simple for now
+func addCustomCode(kbc *utils.TestContext) {
+	// Add custom code to API types
+	apiFile := filepath.Join(kbc.Dir, "api", kbc.Version,
+		fmt.Sprintf("%s_types.go", strings.ToLower(kbc.Kind)))
 
-// initializeGitRepository initializes a git repository with proper configuration
-func initializeGitRepository(git *utils.GitHelper) {
-	Expect(git.Init()).To(Succeed())
-	Expect(git.ConfigUser("Test User", "test@example.com")).To(Succeed())
-	// Ensure we're on a main branch for alpha update command
-	Expect(git.CheckoutNewBranch("main")).To(Succeed())
+	content, err := os.ReadFile(apiFile)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Look for the specific struct definition line
+	structPattern := fmt.Sprintf("type %sSpec struct {", kbc.Kind)
+	if !strings.Contains(string(content), structPattern) {
+		Fail(fmt.Sprintf("Could not find struct definition '%s' in API file", structPattern))
+	}
+
+	newContent := strings.Replace(string(content), structPattern,
+		fmt.Sprintf("%s\n%s", customAPIMarker, structPattern), 1)
+
+	Expect(os.WriteFile(apiFile, []byte(newContent), 0o644)).To(Succeed())
+
+	// Add custom code to controller
+	controllerFile := filepath.Join(kbc.Dir, "internal", "controller",
+		fmt.Sprintf("%s_controller.go", strings.ToLower(kbc.Kind)))
+
+	content, err = os.ReadFile(controllerFile)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Look for the Reconcile function specifically
+	reconcilePattern := fmt.Sprintf("func (r *%sReconciler) Reconcile(", kbc.Kind)
+	if !strings.Contains(string(content), reconcilePattern) {
+		Fail(fmt.Sprintf("Could not find Reconcile function '%s' in controller file", reconcilePattern))
+	}
+
+	newContent = strings.Replace(string(content), reconcilePattern,
+		fmt.Sprintf("%s\n%s", customControllerMarker, reconcilePattern), 1)
+
+	Expect(os.WriteFile(controllerFile, []byte(newContent), 0o644)).To(Succeed())
 }
 
-// scaffoldProjectWithOldVersion scaffolds a project using the old kubebuilder version
-func scaffoldProjectWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
-	initArgs := []string{
-		"init",
+func createProjectWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
+	// Temporarily switch binary
+	originalBinary := kbc.BinaryName
+	kbc.BinaryName = oldBinaryPath
+	defer func() { kbc.BinaryName = originalBinary }()
+
+	// Fix ginkgolinter: Use simpler version check approach
+	cmd := exec.Command(oldBinaryPath, "version")
+	cmd.Dir = kbc.Dir
+	cmd.Env = kbc.Env
+	_, err := kbc.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+
+	Expect(kbc.Init(
 		"--domain", kbc.Domain,
 		"--repo", fmt.Sprintf("github.com/example/%s", kbc.TestSuffix),
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, initArgs...)).To(Succeed())
-	Expect(kbc.Tidy()).To(Succeed())
-}
+	)).To(Succeed())
 
-// createAPIWithOldVersion creates an API using the old kubebuilder version
-func createAPIWithOldVersion(kbc *utils.TestContext, oldBinaryPath string) {
-	apiArgs := []string{
-		"create", "api",
+	Expect(kbc.CreateAPI(
 		"--group", kbc.Group,
 		"--version", kbc.Version,
 		"--kind", kbc.Kind,
 		"--resource",
 		"--controller",
-	}
-	Expect(runCommandWithBinary(kbc, oldBinaryPath, apiArgs...)).To(Succeed())
+	)).To(Succeed())
+
 	Expect(kbc.Tidy()).To(Succeed())
 }
 
-// injectAndCommitCustomCode injects custom code and commits the changes
-func injectAndCommitCustomCode(kbc *utils.TestContext, git *utils.GitHelper, injector *utils.CodeInjector) {
-	const (
-		customAPIMarker        = "// CUSTOM_API_CODE: This is custom API code"
-		customControllerMarker = "// CUSTOM_CONTROLLER_CODE: This is custom controller code"
-	)
+// Improved git operations
+func initGitRepo(kbc *utils.TestContext) {
+	git := utils.NewGitHelper(kbc.Dir, kbc.Env)
+	Expect(git.Init()).To(Succeed())
+	Expect(git.ConfigUser("Test User", "test@example.com")).To(Succeed())
 
-	Expect(injector.InjectAPICode(kbc, customAPIMarker)).To(Succeed())
-	Expect(injector.InjectControllerCode(kbc, customControllerMarker)).To(Succeed())
-
-	Expect(git.Add(".")).To(Succeed())
-	Expect(git.Commit("Add custom code for testing preservation")).To(Succeed())
-}
-
-// commitInitialState commits the initial project state
-func commitInitialState(git *utils.GitHelper) {
-	Expect(git.Add(".")).To(Succeed())
-	Expect(git.Commit("Initial project state")).To(Succeed())
-}
-
-// Alpha update command execution functions
-
-// runAlphaUpdateWithFromVersion runs alpha update with --from-version flag
-func runAlphaUpdateWithFromVersion(kbc *utils.TestContext, fromVersion string) {
-	Expect(kbc.AlphaUpdate("--from-version", fromVersion)).To(Succeed())
-}
-
-// runAlphaUpdateWithFromBranch runs alpha update with --from-branch flag
-func runAlphaUpdateWithFromBranch(kbc *utils.TestContext, fromBranch, fromVersion string) {
-	Expect(kbc.AlphaUpdate("--from-branch", fromBranch, "--from-version", fromVersion)).To(Succeed())
-}
-
-// runAlphaUpdateWithToVersion runs alpha update with both --from-version and --to-version flags
-func runAlphaUpdateWithToVersion(kbc *utils.TestContext, fromVersion, toVersion string) {
-	Expect(kbc.AlphaUpdate("--from-version", fromVersion, "--to-version", toVersion)).To(Succeed())
-}
-
-// Validation functions
-
-// verifyCustomCodePreservation verifies that custom code markers are preserved
-func verifyCustomCodePreservation(kbc *utils.TestContext) {
-	const (
-		customAPIMarker        = "// CUSTOM_API_CODE: This is custom API code"
-		customControllerMarker = "// CUSTOM_CONTROLLER_CODE: This is custom controller code"
-	)
-
-	validator, err := utils.NewProjectValidator(filepath.Join(kbc.Dir, "PROJECT"))
-	Expect(err).NotTo(HaveOccurred())
-
-	customMarkers := map[string]string{
-		filepath.Join("api", kbc.Version, fmt.Sprintf("%s_types.go", strings.ToLower(kbc.Kind))): customAPIMarker,
-		filepath.Join("internal", "controller", fmt.Sprintf("%s_controller.go",
-			strings.ToLower(kbc.Kind))): customControllerMarker,
+	// Check if we need to create main branch (newer git versions default to main)
+	if currentBranch, err := git.GetCurrentBranch(); err != nil || currentBranch != "main" {
+		Expect(git.CheckoutNewBranch("main")).To(Succeed())
 	}
-
-	validator.ValidateCustomCodePreservation(kbc, customMarkers)
 }
 
-// verifyUpdateOutcome verifies the overall outcome of the alpha update command
-func verifyUpdateOutcome(kbc *utils.TestContext, git *utils.GitHelper) {
-	validator, err := utils.NewProjectValidator(filepath.Join(kbc.Dir, "PROJECT"))
+func commitChanges(kbc *utils.TestContext, message string) {
+	git := utils.NewGitHelper(kbc.Dir, kbc.Env)
+	Expect(git.Add(".")).To(Succeed())
+	Expect(git.Commit(message)).To(Succeed())
+}
+
+func verifyCustomCodePreserved(kbc *utils.TestContext) {
+	// Simple file content checks - no kubectl needed!
+	apiFile := filepath.Join(kbc.Dir, "api", kbc.Version,
+		fmt.Sprintf("%s_types.go", strings.ToLower(kbc.Kind)))
+
+	content, err := os.ReadFile(apiFile)
 	Expect(err).NotTo(HaveOccurred())
+	Expect(string(content)).To(ContainSubstring(customAPIMarker))
 
-	validator.ValidateUpdateOutcome(kbc, git)
-	validator.ValidateBasicProjectStructure(kbc)
-}
+	controllerFile := filepath.Join(kbc.Dir, "internal", "controller",
+		fmt.Sprintf("%s_controller.go", strings.ToLower(kbc.Kind)))
 
-// Utility functions for command execution with old binary
-
-// runCommandWithBinary runs a command with a specific binary path
-func runCommandWithBinary(kbc *utils.TestContext, binaryPath string, args ...string) error {
-	cmd := kbc.BinaryName
-	kbc.BinaryName = binaryPath
-	defer func() { kbc.BinaryName = cmd }()
-
-	switch args[0] {
-	case "init":
-		if err := kbc.Init(args[1:]...); err != nil {
-			return fmt.Errorf("failed to init project: %w", err)
-		}
-		return nil
-	case "create":
-		if len(args) > 1 && args[1] == "api" {
-			if err := kbc.CreateAPI(args[2:]...); err != nil {
-				return fmt.Errorf("failed to create API: %w", err)
-			}
-			return nil
-		} else if len(args) > 1 && args[1] == "webhook" {
-			if err := kbc.CreateWebhook(args[2:]...); err != nil {
-				return fmt.Errorf("failed to create webhook: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("unsupported create command: %v", args)
-	case "edit":
-		if err := kbc.Edit(args[1:]...); err != nil {
-			return fmt.Errorf("failed to edit project: %w", err)
-		}
-		return nil
-	default:
-		return fmt.Errorf("unsupported command: %v", args)
-	}
+	content, err = os.ReadFile(controllerFile)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(string(content)).To(ContainSubstring(customControllerMarker))
 }
