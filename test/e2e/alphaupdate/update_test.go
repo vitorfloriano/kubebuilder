@@ -64,7 +64,7 @@ var _ = Describe("kubebuilder", func() {
 			}
 		})
 
-		It("should upgrade a basic project preserving custom code", func() {
+		It("should upgrade a basic project preserving custom code using --from-version", func() {
 			By("initializing git repository")
 			initGitRepo(kbc)
 
@@ -77,8 +77,28 @@ var _ = Describe("kubebuilder", func() {
 			By("committing initial state")
 			commitChanges(kbc, "Initial project with custom code")
 
-			By("running alpha update command")
+			By("running alpha update command with --from-version")
 			Expect(kbc.AlphaUpdate("--from-version", fromVersion)).To(Succeed())
+
+			By("verifying custom code is preserved")
+			verifyCustomCodePreserved(kbc)
+		})
+
+		It("should upgrade a basic project preserving custom code using --to-version", func() {
+			By("initializing git repository")
+			initGitRepo(kbc)
+
+			By("creating project with old kubebuilder version")
+			createProjectWithOldVersion(kbc, oldBinaryPath)
+
+			By("adding custom code to generated files")
+			addCustomCode(kbc)
+
+			By("committing initial state")
+			commitChanges(kbc, "Initial project with custom code")
+
+			By("running alpha update command with --to-version")
+			Expect(kbc.AlphaUpdate("--from-version", fromVersion, "--to-version", "v4.6.0")).To(Succeed())
 
 			By("verifying custom code is preserved")
 			verifyCustomCodePreserved(kbc)
