@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -104,6 +105,51 @@ var _ = Describe("kubebuilder", func() {
 
 			By("validating custom code preservation")
 			validateCustomCodePreservation(mockProjectDir)
+		})
+
+		It("should abort on merge conflicts when --force is not used", func() {
+			By("creating mock project with kubebuilder v4.5.2")
+			createMockProject(mockProjectDir, binFromVersionPath)
+
+			By("injecting conflicting code that will cause merge conflicts")
+			injectConflictingCode(mockProjectDir)
+
+			By("initializing git repository and committing mock project")
+			initializeGitRepo(mockProjectDir)
+
+			By("running alpha update without --force flag")
+			cmd := exec.Command(kbc.BinaryName, "alpha", "update",
+				"--from-version", fromVersion, "--to-version", toVersion, "--from-branch", "main")
+			cmd.Dir = mockProjectDir
+			output, err := cmd.CombinedOutput()
+
+			By("expecting the command to fail due to merge conflicts")
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring("Merge conflicts detected"))
+			Expect(string(output)).To(ContainSubstring("merge aborted due to conflicts"))
+		})
+
+		It("should commit with conflict markers when --force is used", func() {
+			By("creating mock project with kubebuilder v4.5.2")
+			createMockProject(mockProjectDir, binFromVersionPath)
+
+			By("injecting conflicting code that will cause merge conflicts")
+			injectConflictingCode(mockProjectDir)
+
+			By("initializing git repository and committing mock project")
+			initializeGitRepo(mockProjectDir)
+
+			By("running alpha update with --force flag")
+			cmd := exec.Command(kbc.BinaryName, "alpha", "update",
+				"--from-version", fromVersion, "--to-version", toVersion, "--from-branch", "main", "--force")
+			cmd.Dir = mockProjectDir
+			output, err := cmd.CombinedOutput()
+
+			By("expecting the command to succeed despite conflicts")
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Alpha update with --force failed: %s", string(output)))
+
+			By("validating that conflict markers are present in the merged files")
+			validateConflictMarkers(mockProjectDir)
 		})
 	})
 })
@@ -282,4 +328,28 @@ func validateCustomCodePreservation(projectDir string) {
 	Expect(string(content)).To(ContainSubstring("Custom reconciliation logic"))
 	Expect(string(content)).To(ContainSubstring("log.Info(\"Reconciling TestOperator\")"))
 	Expect(string(content)).To(ContainSubstring("log.Info(\"TestOperator size\", \"size\", testOperator.Spec.Size)"))
+}
+
+func injectConflictingCode(projectDir string) {
+	// Modify Makefile to create conflicts
+	makefilePath := filepath.Join(projectDir, "Makefile")
+	content, err := os.ReadFile(makefilePath)
+	Expect(err).NotTo(HaveOccurred())
+
+	conflictingContent := string(content) + "\n# Conflicting content\nconflict-target:\n\t@echo conflict\n"
+	err = os.WriteFile(makefilePath, []byte(conflictingContent), 0644)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func validateConflictMarkers(projectDir string) {
+	makefilePath := filepath.Join(projectDir, "Makefile")
+	content, err := os.ReadFile(makefilePath)
+	Expect(err).NotTo(HaveOccurred())
+	
+	contentStr := string(content)
+	hasMarkers := strings.Contains(contentStr, "<<<<<<<") || 
+		strings.Contains(contentStr, "=======") || 
+		strings.Contains(contentStr, ">>>>>>>")
+	
+	Expect(hasMarkers).To(BeTrue(), "Expected conflict markers in merged files")
 }

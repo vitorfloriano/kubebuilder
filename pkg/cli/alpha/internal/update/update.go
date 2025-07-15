@@ -38,6 +38,8 @@ type Update struct {
 	ToVersion string
 	// FromBranch stores the branch to update from, e.g., "main".
 	FromBranch string
+	// Force commits the update changes even with merge conflicts
+	Force bool
 
 	// UpdateBranches
 	AncestorBranch string
@@ -334,8 +336,12 @@ func (opts *Update) mergeOriginalToUpgrade() error {
 		var exitErr *exec.ExitError
 		// If the merge has an error that is not a conflict, return an error 2
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-			log.Warn("Merge completed with conflicts. Manual resolution required.")
 			hasConflicts = true
+			if !opts.Force {
+				log.Error("Merge conflicts detected. Resolve them manually in the merge branch.")
+				return fmt.Errorf("merge aborted due to conflicts")
+			}
+			log.Warn("Merge completed with conflicts. Conflict markers will be committed.")
 		} else {
 			return fmt.Errorf("merge failed unexpectedly: %w", err)
 		}
