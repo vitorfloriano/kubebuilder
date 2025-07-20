@@ -1,0 +1,71 @@
+{
+  "name": "Kubebuilder Development Environment",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableNonRootDocker": "true"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    }
+  },
+
+  "runArgs": [
+    "--network=host",
+    "--privileged"
+  ],
+
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash",
+        "go.gopath": "/go",
+        "go.toolsGopath": "/go/bin",
+        "go.useLanguageServer": true,
+        "go.lintOnSave": "package",
+        "go.formatTool": "goimports",
+        "go.lintTool": "golangci-lint",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "files.eol": "\n"
+      },
+      "extensions": [
+        "golang.go",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "ms-vscode.makefile-tools",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "Tim-Koehler.helm-intellisense",
+        "ms-vscode.test-adapter-converter"
+      ]
+    }
+  },
+
+  "remoteEnv": {
+    "GOPROXY": "https://proxy.golang.org/",
+    "GOSUMDB": "sum.golang.org",
+    "CGO_ENABLED": "0",
+    "KUBECONFIG": "/tmp/kubeconfig"
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "forwardPorts": [
+    8080,
+    8081,
+    9443
+  ],
+
+  "remoteUser": "vscode"
+}
