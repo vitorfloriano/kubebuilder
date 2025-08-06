@@ -97,12 +97,12 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to checkout upgrade off ancestor: %w", err)
 	}
 
-	// 1. Creates merge branch from upgrade
-	// 2. Merges in original (user code)
+	// 1. Creates merge branch from original
+	// 2. Merges in upgrade
 	// 3. If conflicts occur, it will warn the user and leave the merge branch for manual resolution
 	// 4. If merge is clean, it stages the changes and commits the result
 	log.Info("Preparing Merge branch and performing merge", "branch_name", opts.MergeBranch)
-	if err := opts.mergeOriginalToUpgrade(); err != nil {
+	if err := opts.mergeUpgradeToOriginal(); err != nil {
 		return fmt.Errorf("failed to merge upgrade into merge branch: %w", err)
 	}
 	return nil
@@ -318,9 +318,9 @@ func (opts *Update) prepareUpgradeBranch() error {
 	return nil
 }
 
-// mergeOriginalToUpgrade attempts to merge the upgrade branch
-func (opts *Update) mergeOriginalToUpgrade() error {
-	if err := exec.Command("git", "checkout", "-b", opts.MergeBranch, opts.UpgradeBranch).Run(); err != nil {
+// mergeUpgradeToOriginal creates a merge branch from the original branch and merges the upgrade branch into it
+func (opts *Update) mergeUpgradeToOriginal() error {
+	if err := exec.Command("git", "checkout", "-b", opts.MergeBranch, opts.OriginalBranch).Run(); err != nil {
 		return fmt.Errorf("failed to create merge branch %s from %s: %w", opts.MergeBranch, opts.OriginalBranch, err)
 	}
 
@@ -329,7 +329,7 @@ func (opts *Update) mergeOriginalToUpgrade() error {
 		return fmt.Errorf("failed to checkout base branch %s: %w", opts.MergeBranch, err)
 	}
 
-	mergeCmd := exec.Command("git", "merge", "--no-edit", "--no-commit", opts.OriginalBranch)
+	mergeCmd := exec.Command("git", "merge", "--no-edit", "--no-commit", opts.UpgradeBranch)
 	err := mergeCmd.Run()
 
 	hasConflicts := false

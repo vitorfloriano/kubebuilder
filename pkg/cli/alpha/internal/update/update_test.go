@@ -344,7 +344,7 @@ var _ = Describe("Prepare for internal update", func() {
 
 	Context("MergeOriginalToUpgrade", func() {
 		It("Should scucceed MergeOriginalToUpgrade", func() {
-			err = opts.mergeOriginalToUpgrade()
+			err = opts.mergeUpgradeToOriginal()
 			Expect(err).ToNot(HaveOccurred())
 
 			logs, readErr := os.ReadFile(logFile)
@@ -363,7 +363,7 @@ var _ = Describe("Prepare for internal update", func() {
 							exit 1`
 			err = mockBinResponse(fakeBinScript, mockGit)
 			Expect(err).ToNot(HaveOccurred())
-			err := opts.mergeOriginalToUpgrade()
+			err := opts.mergeUpgradeToOriginal()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(
 				"failed to create merge branch %s from %s", opts.MergeBranch, opts.OriginalBranch))
