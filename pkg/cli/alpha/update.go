@@ -77,6 +77,18 @@ Examples:
   # Squash into a custom output branch name
   kubebuilder alpha update --force --squash --output-branch my-update-branch
 
+  # Create a PR automatically after update (requires gh CLI)
+  kubebuilder alpha update --force --squash --open-pr
+
+  # Create a PR with custom title/body via environment variables (supports Go templates)
+  export KUBEBUILDER_UPDATE_PR_TITLE="feat: Update scaffold from {{.FromVersion}} to {{.ToVersion}}"
+  export KUBEBUILDER_UPDATE_PR_BODY="Automated scaffold update from {{.FromVersion}} to {{.ToVersion}} \\
+    on branch {{.BranchName}}"
+  kubebuilder alpha update --force --squash --open-pr
+
+  # Create both PR and issue (issue as fallback if PR fails)  
+  kubebuilder alpha update --force --squash --open-pr --open-issue
+
 Behavior summary:
   • Without --force:
       - If conflicts occur during the 3-way merge, the command stops on the 'merge' branch
@@ -86,7 +98,16 @@ Behavior summary:
   • With --squash:
       - After the merge step, the exact 'merge' tree is copied to a new/updated branch
         (default: kubebuilder-alpha-update-to-<to-version>) and committed ONCE, keeping markers
-        if present. This branch is intended for opening/refreshing a PR.`,
+        if present. This branch is intended for opening/refreshing a PR.
+  • With --open-pr:
+      - Requires gh CLI to be installed and authenticated ('gh auth login')
+      - Creates a PR from the update branch to the base branch
+      - PR title/body support Go templates with {{.FromVersion}}, {{.ToVersion}}, {{.BranchName}}
+      - Can be customized via KUBEBUILDER_UPDATE_PR_TITLE/KUBEBUILDER_UPDATE_PR_BODY env vars
+  • With --open-issue:
+      - Can be used standalone or as fallback when --open-pr fails
+      - Issue title/body support Go templates with version/branch information
+      - Can be customized via KUBEBUILDER_UPDATE_ISSUE_TITLE/KUBEBUILDER_UPDATE_ISSUE_BODY env vars`,
 		PreRunE: func(_ *cobra.Command, _ []string) error {
 			err := opts.Prepare()
 			if err != nil {
@@ -121,6 +142,13 @@ Behavior summary:
 			"Example: --preserve-path .github/workflows")
 	updateCmd.Flags().StringVar(&opts.OutputBranch, "output-branch", "",
 		"Override the default kubebuilder-alpha-update-to-<to-version> branch name (used with --squash).")
+	updateCmd.Flags().BoolVar(&opts.OpenPR, "open-pr", false,
+		"Create a pull request using gh CLI after successful update. Requires gh CLI to be installed and authenticated.")
+	updateCmd.Flags().BoolVar(&opts.OpenIssue, "open-issue", false,
+		"Create an issue using gh CLI. Can be used standalone or as a fallback when --open-pr fails.")
+	updateCmd.Flags().StringVar(&opts.CommitMessage, "commit-message", "",
+		"Custom commit message for the squashed commit (used with --squash). "+
+			"If not set, uses default format.")
 
 	return updateCmd
 }

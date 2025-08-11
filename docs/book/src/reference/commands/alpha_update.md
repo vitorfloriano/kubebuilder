@@ -92,7 +92,46 @@ Use a **custom output branch** name:
 
 ```shell
 kubebuilder alpha update --force --squash \
-  -output-branch upgrade/kb-to-v4.7.0
+  --output-branch upgrade/kb-to-v4.7.0
+```
+
+**Create a pull request** automatically after update:
+
+```shell
+kubebuilder alpha update --force --squash --open-pr
+```
+
+**Create an issue** if PR fails (or standalone):
+
+```shell
+kubebuilder alpha update --force --squash --open-pr --open-issue
+```
+
+**Customize PR title and body** with environment variables:
+
+```shell
+export KUBEBUILDER_UPDATE_PR_TITLE="feat: Update scaffold from {{.FromVersion}} to {{.ToVersion}}"
+export KUBEBUILDER_UPDATE_PR_BODY="Automated scaffold update from {{.FromVersion}} to {{.ToVersion}} on branch {{.BranchName}}"
+kubebuilder alpha update --force --squash --open-pr
+```
+
+**Use a custom commit message** for the squashed commit:
+
+```shell
+kubebuilder alpha update --force --squash \
+  --commit-message "feat: upgrade Kubebuilder scaffold to v4.7.0
+
+- Updated project scaffold using 3-way merge
+- Preserved custom code changes
+- Ready for review and testing"
+```
+
+**Combine custom commit message with PR creation**:
+
+```shell
+kubebuilder alpha update --force --squash \
+  --commit-message "chore: automated Kubebuilder update to v4.7.0" \
+  --open-pr
 ```
 
 ## Merge Conflicts with `--force`
@@ -111,9 +150,142 @@ Incoming changes
 - **Without `--force`**: the command stops on `tmp-merge-*` and prints guidance; no commit is created.
 - **With `--force`**: the merge is committed (on `tmp-merge-*`, or on the output branch if using `--squash`) and contains the markers.
 
-## Commit message used in `--squash` mode
+## Commit Message in `--squash` Mode
+
+By default, the squashed commit uses this format:
 
 > [kubebuilder-automated-update]: update scaffold from <from> to <to>; (squashed 3-way merge)
+
+You can customize this message using the `--commit-message` flag:
+
+```shell
+kubebuilder alpha update --force --squash \
+  --commit-message "feat: update scaffold to v4.7.0"
+```
+
+**Multi-line commit messages** are supported:
+
+```shell
+kubebuilder alpha update --force --squash \
+  --commit-message "feat: upgrade Kubebuilder scaffold to v4.7.0
+
+This update includes:
+- New project structure improvements
+- Updated dependencies
+- Enhanced tooling support
+
+Generated using kubebuilder alpha update with 3-way merge."
+```
+
+## GitHub Integration (`--open-pr` and `--open-issue`)
+
+The `--open-pr` and `--open-issue` flags integrate with GitHub to automatically create pull requests and issues after successful updates.
+
+### Prerequisites
+
+- **`gh` CLI installed and authenticated**: Run `gh auth login` to authenticate
+- **Repository access**: The `gh` CLI must have access to create PRs and issues in your repository
+
+<aside class="note">
+<h1>CI Environment Support</h1>
+
+In **GitHub Actions** (ubuntu-latest runners), the `gh` CLI is already installed and authenticated with the `GITHUB_TOKEN`. You can use `--open-pr` and `--open-issue` directly without additional setup.
+
+Make sure your workflow has the necessary permissions:
+
+```yaml
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+```
+
+</aside>
+
+### Pull Request Creation (`--open-pr`)
+
+When `--open-pr` is used:
+
+1. **Creates a PR** from the update branch to your base branch
+2. **Uses dynamic templates** for title and body that support Go template syntax
+3. **Available template variables**:
+   - `{{.FromVersion}}` - The starting Kubebuilder version
+   - `{{.ToVersion}}` - The target Kubebuilder version  
+   - `{{.BranchName}}` - The name of the update branch
+
+### Issue Creation (`--open-issue`)
+
+The `--open-issue` flag can be used in two ways:
+
+1. **Standalone**: Create an issue documenting the completed update
+2. **Fallback**: When used with `--open-pr`, creates an issue if PR creation fails
+
+### Customizing Templates
+
+Override the default templates using environment variables:
+
+```shell
+# PR customization
+export KUBEBUILDER_UPDATE_PR_TITLE="Custom title: {{.FromVersion}} → {{.ToVersion}}"
+export KUBEBUILDER_UPDATE_PR_BODY="Updated scaffold on branch {{.BranchName}}"
+
+# Issue customization  
+export KUBEBUILDER_UPDATE_ISSUE_TITLE="Manual action needed: {{.FromVersion}} → {{.ToVersion}}"
+export KUBEBUILDER_UPDATE_ISSUE_BODY="Update completed on {{.BranchName}} - please review"
+
+kubebuilder alpha update --force --squash --open-pr --open-issue
+```
+
+### Default Templates
+
+**PR Title**: `"Update Kubebuilder scaffold from {{.FromVersion}} to {{.ToVersion}}"`
+
+**PR Body**:
+```
+Automated Kubebuilder scaffold update.
+
+**Changes:**
+- Updated from version {{.FromVersion}} to {{.ToVersion}}
+- Generated using kubebuilder alpha update with 3-way merge strategy
+- Branch: {{.BranchName}}
+
+**Release Notes:**
+- [{{.ToVersion}} Release Notes](https://github.com/kubernetes-sigs/kubebuilder/releases/tag/{{.ToVersion}})
+
+**Review Notes:**
+- Check for any merge conflicts that may need manual resolution
+- Verify that custom code changes are preserved correctly
+- Test the updated scaffold with your project's specific requirements
+
+*This PR was created automatically by kubebuilder alpha update.*
+```
+
+**Issue Title** (when PR fails): `"Manual PR needed: Update Kubebuilder from {{.FromVersion}} to {{.ToVersion}}"`
+
+**Issue Body** (when PR fails):
+```
+## Kubebuilder update completed but PR creation failed
+
+**Update Details:**
+- From version: {{.FromVersion}}
+- To version: {{.ToVersion}}
+- Update branch: {{.BranchName}}
+
+**Release Notes:**
+- [{{.ToVersion}} Release Notes](https://github.com/kubernetes-sigs/kubebuilder/releases/tag/{{.ToVersion}})
+
+**Manual Action Required:**
+The scaffold update has been completed successfully on branch {{.BranchName}}. Please create a pull request manually:
+
+1. Review the changes on the branch
+2. Create a PR from the branch to your main branch
+3. Review and merge the PR
+
+**Branch Link:**
+[Create PR from {{.BranchName}}](../../compare/{{.BranchName}})
+
+*This issue was created automatically by kubebuilder alpha update.*
+```
 
 <aside class="note warning">
 <h1>You might need to upgrade your project first</h1>
@@ -156,6 +328,9 @@ make all
 | `--squash`        | Write the merge result as **one commit** on a stable output branch.                                                                         |
 | `--preserve-path` | Repeatable. With `--squash`, restore these paths from the base branch (e.g., `--preserve-path .github/workflows`).                          |
 | `--output-branch` | Branch name to use for the squashed commit (default: `kubebuilder-alpha-update-to-<to-version>`).                                          |
+| `--commit-message`| Custom commit message for the squashed commit (used with `--squash`). If not set, uses default format.                                     |
+| `--open-pr`       | Create a pull request using `gh` CLI after successful update. Requires `gh` CLI to be installed and authenticated.                          |
+| `--open-issue`    | Create an issue using `gh` CLI. Can be used standalone or as fallback when `--open-pr` fails.                                             |
 | `-h, --help`      | Show help for this command.                                                                                                                |
 
 <aside class="note">

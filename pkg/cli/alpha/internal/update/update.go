@@ -17,6 +17,7 @@ limitations under the License.
 package update
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/spf13/afero"
@@ -54,6 +56,16 @@ type Update struct {
 	// OutputBranch is the branch name to use with Squash.
 	// If empty, it defaults to "kubebuilder-alpha-update-to-<ToVersion>".
 	OutputBranch string
+
+	// OpenPR creates a pull request using gh CLI after successful update when true.
+	OpenPR bool
+
+	// OpenIssue creates an issue using gh CLI when OpenPR fails or when used standalone.
+	OpenIssue bool
+
+	// CommitMessage is the custom commit message to use when squashing.
+	// If empty, uses the default message format.
+	CommitMessage string
 
 	// UpdateBranches
 	AncestorBranch string
@@ -124,6 +136,13 @@ func (opts *Update) Update() error {
 			return fmt.Errorf("failed to squash to output branch: %w", err)
 		}
 	}
+
+	// If requested, create PR or issue using gh CLI
+	if opts.OpenPR || opts.OpenIssue {
+		if err := opts.handleGitHubIntegration(); err != nil {
+			return fmt.Errorf("failed to handle GitHub integration: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -168,8 +187,14 @@ func (opts *Update) squashToOutputBranch() error {
 	if err := exec.Command("git", "add", "--all").Run(); err != nil {
 		return fmt.Errorf("stage output: %w", err)
 	}
-	msg := fmt.Sprintf("[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)",
-		opts.FromVersion, opts.ToVersion)
+
+	// Use custom commit message if provided, otherwise use default format
+	msg := opts.CommitMessage
+	if msg == "" {
+		msg = fmt.Sprintf("[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)",
+			opts.FromVersion, opts.ToVersion)
+	}
+
 	if err := exec.Command("git", "commit", "--no-verify", "-m", msg).Run(); err != nil {
 		return nil
 	}
@@ -442,4 +467,231 @@ func (opts *Update) mergeOriginalToUpgrade() error {
 	_ = exec.Command("git", "commit", "-m", message).Run()
 
 	return nil
+}
+
+// handleGitHubIntegration manages PR and issue creation using gh CLI
+func (opts *Update) handleGitHubIntegration() error {
+	// Ensure we have gh CLI available
+	if err := exec.Command("gh", "--version").Run(); err != nil {
+		return fmt.Errorf("gh CLI not found or not authenticated. Install gh and run 'gh auth login'")
+	}
+
+	if opts.OpenPR {
+		if err := opts.createPullRequest(); err != nil {
+			log.Warn("Failed to create pull request", "error", err)
+			// If PR fails and OpenIssue is enabled, create issue as fallback
+			if opts.OpenIssue {
+				log.Info("Creating issue as fallback for failed PR creation")
+				return opts.createIssue(err)
+			}
+			return fmt.Errorf("failed to create pull request: %w", err)
+		}
+		log.Info("Pull request created successfully")
+		return nil
+	}
+
+	// If only OpenIssue is enabled (not as fallback)
+	if opts.OpenIssue {
+		return opts.createIssue(nil)
+	}
+
+	return nil
+}
+
+// createPullRequest creates a PR using gh CLI with dynamic title and body generation
+func (opts *Update) createPullRequest() error {
+	// Determine the branch name
+	branchName := opts.OutputBranch
+	if branchName == "" {
+		branchName = "kubebuilder-alpha-update-to-" + opts.ToVersion
+	}
+
+	// Create template data
+	templateData := TemplateData{
+		FromVersion: opts.FromVersion,
+		ToVersion:   opts.ToVersion,
+		BranchName:  branchName,
+	}
+
+	// Get PR title from environment variable or use default template
+	prTitleTemplate := os.Getenv("KUBEBUILDER_UPDATE_PR_TITLE")
+	if prTitleTemplate == "" {
+		prTitleTemplate = "Update Kubebuilder scaffold from {{.FromVersion}} to {{.ToVersion}}"
+	}
+
+	prTitle, err := renderTemplate(prTitleTemplate, templateData)
+	if err != nil {
+		return fmt.Errorf("failed to render PR title: %w", err)
+	}
+
+	// Get PR body from environment variable or use default template
+	prBodyTemplate := os.Getenv("KUBEBUILDER_UPDATE_PR_BODY")
+	if prBodyTemplate == "" {
+		prBodyTemplate = `Automated Kubebuilder scaffold update.
+
+**Changes:**
+- Updated from version {{.FromVersion}} to {{.ToVersion}}
+- Generated using kubebuilder alpha update with 3-way merge strategy
+- Branch: {{.BranchName}}
+
+**Review Notes:**
+- Check for any merge conflicts that may need manual resolution
+- Verify that custom code changes are preserved correctly
+- Test the updated scaffold with your project's specific requirements
+
+*This PR was created automatically by kubebuilder alpha update.*`
+	}
+
+	prBody, err := renderTemplate(prBodyTemplate, templateData)
+	if err != nil {
+		return fmt.Errorf("failed to render PR body: %w", err)
+	}
+
+	// Create PR using gh CLI
+	cmd := exec.Command("gh", "pr", "create",
+		"--head", branchName,
+		"--title", prTitle,
+		"--body", prBody,
+	)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("gh pr create failed: %w", err)
+	}
+
+	return nil
+}
+
+// createIssue creates an issue using gh CLI with dynamic title and body generation
+func (opts *Update) createIssue(prError error) error {
+	// Determine the branch name
+	branchName := opts.OutputBranch
+	if branchName == "" {
+		branchName = "kubebuilder-alpha-update-to-" + opts.ToVersion
+	}
+
+	// Create template data (extended with error information)
+	templateData := struct {
+		TemplateData
+		PRError    error
+		HasPRError bool
+	}{
+		TemplateData: TemplateData{
+			FromVersion: opts.FromVersion,
+			ToVersion:   opts.ToVersion,
+			BranchName:  branchName,
+		},
+		PRError:    prError,
+		HasPRError: prError != nil,
+	}
+
+	// Get issue title from environment variable or use default template
+	issueTitleTemplate := os.Getenv("KUBEBUILDER_UPDATE_ISSUE_TITLE")
+	if issueTitleTemplate == "" {
+		if prError != nil {
+			issueTitleTemplate = "Manual PR needed: Update Kubebuilder from {{.FromVersion}} to {{.ToVersion}}"
+		} else {
+			issueTitleTemplate = "Kubebuilder update completed: {{.FromVersion}} to {{.ToVersion}}"
+		}
+	}
+
+	issueTitle, err := renderTemplate(issueTitleTemplate, templateData.TemplateData)
+	if err != nil {
+		return fmt.Errorf("failed to render issue title: %w", err)
+	}
+
+	// Get issue body from environment variable or use default template
+	issueBodyTemplate := os.Getenv("KUBEBUILDER_UPDATE_ISSUE_BODY")
+	if issueBodyTemplate == "" {
+		if prError != nil {
+			// Issue as fallback for failed PR
+			issueBodyTemplate = `## Kubebuilder update completed but PR creation failed
+
+**Update Details:**
+- From version: {{.FromVersion}}
+- To version: {{.ToVersion}}
+- Update branch: {{.BranchName}}
+
+**PR Creation Error:**
+{{.PRError}}
+
+**Manual Action Required:**
+The scaffold update has been completed successfully on branch {{.BranchName}}. Please create a pull request manually:
+
+1. Review the changes on the branch
+2. Create a PR from the branch to your main branch
+3. Review and merge the PR
+
+**Branch Link:**
+[Create PR from {{.BranchName}}](../../compare/{{.BranchName}})
+
+*This issue was created automatically by kubebuilder alpha update.*`
+		} else {
+			// Standalone issue creation
+			issueBodyTemplate = `## Kubebuilder scaffold update completed
+
+**Update Details:**
+- From version: {{.FromVersion}}
+- To version: {{.ToVersion}}
+- Update branch: {{.BranchName}}
+
+**Actions Taken:**
+- ✅ Scaffold updated using 3-way merge strategy
+- ✅ Changes committed to update branch
+
+**Next Steps:**
+Review the updated scaffold and create a pull request when ready.
+
+*This issue was created automatically by kubebuilder alpha update.*`
+		}
+	}
+
+	// Use a custom template with access to PRError
+	tmpl, err := template.New("issueBody").Parse(issueBodyTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to parse issue body template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, templateData)
+	if err != nil {
+		return fmt.Errorf("failed to execute issue body template: %w", err)
+	}
+
+	issueBody := buf.String()
+
+	// Create issue using gh CLI
+	cmd := exec.Command("gh", "issue", "create",
+		"--title", issueTitle,
+		"--body", issueBody,
+	)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("gh issue create failed: %w", err)
+	}
+
+	log.Info("Issue created successfully")
+	return nil
+}
+
+// TemplateData contains the data available for template rendering
+type TemplateData struct {
+	FromVersion string
+	ToVersion   string
+	BranchName  string
+}
+
+// renderTemplate processes a template string with the given data
+func renderTemplate(templateStr string, data TemplateData) (string, error) {
+	tmpl, err := template.New("content").Parse(templateStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
 }

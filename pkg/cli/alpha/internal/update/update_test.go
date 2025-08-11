@@ -55,6 +55,7 @@ var _ = Describe("Prepare for internal update", func() {
 		mockGit  string
 		mockMake string
 		mocksh   string
+		mockGh   string
 		logFile  string
 		oldPath  string
 		err      error
@@ -79,6 +80,7 @@ var _ = Describe("Prepare for internal update", func() {
 		mockGit = filepath.Join(tmpDir, "git")
 		mockMake = filepath.Join(tmpDir, "make")
 		mocksh = filepath.Join(tmpDir, "sh")
+		mockGh = filepath.Join(tmpDir, "gh")
 		script := `#!/bin/bash
             echo "$@" >> "` + logFile + `"
            exit 0`
@@ -87,6 +89,8 @@ var _ = Describe("Prepare for internal update", func() {
 		err = mockBinResponse(script, mockMake)
 		Expect(err).NotTo(HaveOccurred())
 		err = mockBinResponse(script, mocksh)
+		Expect(err).NotTo(HaveOccurred())
+		err = mockBinResponse(script, mockGh)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Prepend temp bin directory to PATH env
@@ -454,6 +458,235 @@ exit 0`
 			Expect(string(s)).To(ContainSubstring("checkout -B kubebuilder-alpha-update-to-" + opts.ToVersion + " main"))
 			Expect(string(s)).To(ContainSubstring("-c find . -mindepth 1"))
 			Expect(string(s)).To(ContainSubstring("checkout " + opts.MergeBranch + " -- ."))
+		})
+
+		It("update: uses custom commit message with --squash", func() {
+			opts.Squash = true
+			opts.CommitMessage = "chore: automated scaffold update"
+
+			Expect(opts.Update()).To(Succeed())
+			s, _ := os.ReadFile(logFile)
+			Expect(string(s)).To(ContainSubstring("commit --no-verify -m chore: automated scaffold update"))
+			Expect(string(s)).ToNot(ContainSubstring("[kubebuilder-automated-update]"))
+		})
+
+		It("should use custom commit message when provided", func() {
+			opts.CommitMessage = "feat: custom upgrade message"
+			err = opts.squashToOutputBranch()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			logStr := string(logs)
+
+			Expect(logStr).To(ContainSubstring("commit --no-verify -m feat: custom upgrade message"))
+			Expect(logStr).ToNot(ContainSubstring("[kubebuilder-automated-update]"))
+		})
+
+		It("should use default commit message when CommitMessage is empty", func() {
+			opts.CommitMessage = "" // explicitly empty
+
+			err = opts.squashToOutputBranch()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			logStr := string(logs)
+
+			expectedMsg := fmt.Sprintf(
+				"[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)",
+				opts.FromVersion, opts.ToVersion,
+			)
+			Expect(logStr).To(ContainSubstring(expectedMsg))
+		})
+
+		It("should handle multi-line custom commit messages", func() {
+			customMsg := `feat: upgrade scaffold to v4.6.0
+
+This update includes:
+- New project structure
+- Updated dependencies
+- Enhanced tooling`
+
+			opts.CommitMessage = customMsg
+
+			err = opts.squashToOutputBranch()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			logStr := string(logs)
+
+			Expect(logStr).To(ContainSubstring("commit --no-verify -m " + customMsg))
+		})
+	})
+
+	Context("GitHub Integration", func() {
+		BeforeEach(func() {
+			opts.Squash = true // GitHub integration requires squash
+		})
+
+		It("should call gh CLI for PR creation when --open-pr is set", func() {
+			opts.OpenPR = true
+			
+			// Mock gh CLI to be available and succeed
+			fakeBinScript := `#!/bin/bash
+echo "$@" >> "` + logFile + `"
+if [[ "$1" == "--version" ]]; then
+  echo "gh version 2.0.0"
+  exit 0
+fi
+if [[ "$1" == "pr" && "$2" == "create" ]]; then
+  echo "PR created successfully"
+  exit 0
+fi
+exit 0`
+
+			err := mockBinResponse(fakeBinScript, mockGh)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = opts.Update()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			logStr := string(logs)
+
+			Expect(logStr).To(ContainSubstring("--version"))
+			Expect(logStr).To(ContainSubstring("pr create"))
+			Expect(logStr).To(ContainSubstring("--head kubebuilder-alpha-update-to-" + opts.ToVersion))
+		})
+
+		It("should fallback to issue creation when PR fails and --open-issue is set", func() {
+			opts.OpenPR = true
+			opts.OpenIssue = true
+			
+			// Mock gh CLI: version succeeds, PR fails, issue succeeds
+			fakeBinScript := `#!/bin/bash
+echo "$@" >> "` + logFile + `"
+if [[ "$1" == "--version" ]]; then
+  echo "gh version 2.0.0"
+  exit 0
+fi
+if [[ "$1" == "pr" && "$2" == "create" ]]; then
+  echo "PR creation failed"
+  exit 1
+fi
+if [[ "$1" == "issue" && "$2" == "create" ]]; then
+  echo "Issue created successfully"
+  exit 0
+fi
+exit 0`
+
+			err := mockBinResponse(fakeBinScript, mockGh)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = opts.Update()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			logStr := string(logs)
+
+			Expect(logStr).To(ContainSubstring("pr create"))
+			Expect(logStr).To(ContainSubstring("issue create"))
+			Expect(logStr).To(ContainSubstring("Manual PR needed"))
+		})
+
+		It("should create issue only when --open-issue is set without --open-pr", func() {
+			opts.OpenIssue = true
+			
+			fakeBinScript := `#!/bin/bash
+echo "$@" >> "` + logFile + `"
+if [[ "$1" == "--version" ]]; then
+  echo "gh version 2.0.0"
+  exit 0
+fi
+if [[ "$1" == "issue" && "$2" == "create" ]]; then
+  echo "Issue created successfully"
+  exit 0
+fi
+exit 0`
+
+			err := mockBinResponse(fakeBinScript, mockGh)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = opts.Update()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			logStr := string(logs)
+
+			Expect(logStr).To(ContainSubstring("issue create"))
+			Expect(logStr).ToNot(ContainSubstring("pr create"))
+		})
+
+		It("should fail when gh CLI is not available", func() {
+			opts.OpenPR = true
+			
+			// Mock gh CLI not available
+			fakeBinScript := `#!/bin/bash
+exit 1  # gh --version fails`
+
+			err := mockBinResponse(fakeBinScript, mockGh)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = opts.Update()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("gh CLI not found"))
+		})
+	})
+
+	Context("Template Rendering", func() {
+		It("should render basic template with version data", func() {
+			data := TemplateData{
+				FromVersion: "v4.5.0",
+				ToVersion:   "v4.6.0",
+				BranchName:  "kubebuilder-alpha-update-to-v4.6.0",
+			}
+
+			template := "Update from {{.FromVersion}} to {{.ToVersion}} on {{.BranchName}}"
+			result, err := renderTemplate(template, data)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result).To(Equal("Update from v4.5.0 to v4.6.0 on kubebuilder-alpha-update-to-v4.6.0"))
+		})
+
+		It("should handle complex multi-line templates", func() {
+			data := TemplateData{
+				FromVersion: "v4.5.0",
+				ToVersion:   "v4.6.0",
+				BranchName:  "custom-branch",
+			}
+
+			template := `## PR: {{.FromVersion}} → {{.ToVersion}}
+
+Branch: {{.BranchName}}
+Changes: Updated scaffold`
+
+			result, err := renderTemplate(template, data)
+			expected := `## PR: v4.5.0 → v4.6.0
+
+Branch: custom-branch
+Changes: Updated scaffold`
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result).To(Equal(expected))
+		})
+
+		It("should return error for invalid templates", func() {
+			data := TemplateData{FromVersion: "v4.5.0", ToVersion: "v4.6.0", BranchName: "test"}
+			
+			_, err := renderTemplate("{{.InvalidField}}", data)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return error for malformed templates", func() {
+			data := TemplateData{FromVersion: "v4.5.0", ToVersion: "v4.6.0", BranchName: "test"}
+			
+			_, err := renderTemplate("{{.FromVersion", data) // Missing closing brace
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })
