@@ -138,9 +138,15 @@ func (opts *Update) Update() error {
 	}
 
 	// Always create output branch after merge and preserve-path completion
-	// Squashing already happened during merge step based on NoSquash flag
 	if err := opts.createOutputBranch(); err != nil {
 		return fmt.Errorf("failed to create output branch: %w", err)
+	}
+
+	// Squash by default, unless --no-squash is specified (debug mode)
+	if !opts.NoSquash {
+		if err := opts.squashOutputBranch(); err != nil {
+			return fmt.Errorf("failed to squash output branch: %w", err)
+		}
 	}
 	return nil
 }
@@ -165,6 +171,26 @@ func (opts *Update) createOutputBranch() error {
 	return nil
 }
 
+// squashOutputBranch squashes all commits on the current output branch into a single commit.
+// Uses git reset --soft to preserve all changes while collapsing the commit history.
+func (opts *Update) squashOutputBranch() error {
+	log.Info("Squashing output branch into single commit using reset --soft")
+
+	// Reset to the base branch while keeping all changes staged
+	if err := exec.Command("git", "reset", "--soft", opts.FromBranch).Run(); err != nil {
+		return fmt.Errorf("failed to reset --soft to %s: %w", opts.FromBranch, err)
+	}
+
+	// Create single commit with all squashed changes
+	msg := fmt.Sprintf("[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)",
+		opts.FromVersion, opts.ToVersion)
+	if err := exec.Command("git", "commit", "--no-verify", "-m", msg).Run(); err != nil {
+		return nil // Treat commit failure as success (no changes case)
+	}
+
+	log.Info("Output branch squashed successfully using reset --soft")
+	return nil
+}
 
 // regenerateProjectWithVersion downloads the release binary for the specified version,
 // and runs the `alpha generate` command to re-scaffold the project
@@ -387,15 +413,7 @@ func (opts *Update) mergeOriginalToUpgrade() error {
 		return fmt.Errorf("failed to checkout base branch %s: %w", opts.MergeBranch, err)
 	}
 
-	// Use --squash by default to create a single commit, or --no-commit for debug mode
-	var mergeCmd *exec.Cmd
-	if opts.NoSquash {
-		// Debug mode: keep all commits with --no-commit for manual commit
-		mergeCmd = exec.Command("git", "merge", "--no-edit", "--no-commit", opts.OriginalBranch)
-	} else {
-		// Default: squash all commits into staged changes for single commit
-		mergeCmd = exec.Command("git", "merge", "--squash", opts.OriginalBranch)
-	}
+	mergeCmd := exec.Command("git", "merge", "--no-edit", "--no-commit", opts.OriginalBranch)
 	err := mergeCmd.Run()
 
 	hasConflicts := false
@@ -429,24 +447,14 @@ func (opts *Update) mergeOriginalToUpgrade() error {
 		return fmt.Errorf("failed to stage merge results: %w", err)
 	}
 
-	var message string
-	if opts.NoSquash {
-		// Debug mode: regular merge commit message
-		message = fmt.Sprintf("Merge from %s to %s.", opts.FromVersion, opts.ToVersion)
-		if hasConflicts {
-			message += " With conflicts - manual resolution required."
-		} else {
-			message += " Merge happened without conflicts."
-		}
+	message := fmt.Sprintf("Merge from %s to %s.", opts.FromVersion, opts.ToVersion)
+	if hasConflicts {
+		message += " With conflicts - manual resolution required."
 	} else {
-		// Default squash mode: single commit message
-		message = fmt.Sprintf("[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)", opts.FromVersion, opts.ToVersion)
-		if hasConflicts {
-			message += " With conflicts - manual resolution required."
-		}
+		message += " Merge happened without conflicts."
 	}
 
-	_ = exec.Command("git", "commit", "--no-verify", "-m", message).Run()
+	_ = exec.Command("git", "commit", "-m", message).Run()
 
 	return nil
 }
