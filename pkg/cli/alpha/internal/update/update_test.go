@@ -381,7 +381,7 @@ var _ = Describe("Prepare for internal update", func() {
 
 		It("should create/reset the output branch and commit one squashed snapshot", func() {
 			opts.OutputBranch = ""
-			opts.PreservePath = []string{".github/workflows"} // exercise the restore call
+			// Note: preserve-path is now handled in main workflow, not during squash
 
 			err = opts.squashToOutputBranch()
 			Expect(err).ToNot(HaveOccurred())
@@ -399,10 +399,6 @@ var _ = Describe("Prepare for internal update", func() {
 				"-c find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +",
 			))
 			Expect(s).To(ContainSubstring(fmt.Sprintf("checkout %s -- .", opts.MergeBranch)))
-			Expect(s).To(ContainSubstring(fmt.Sprintf(
-				"restore --source %s --staged --worktree .github/workflows",
-				opts.FromBranch,
-			)))
 			Expect(s).To(ContainSubstring("add --all"))
 
 			msg := fmt.Sprintf(
@@ -439,12 +435,12 @@ exit 0`
 			Expect(string(s)).To(ContainSubstring("commit --no-verify -m"))
 		})
 
-		It("squash: trims preserve-path and skips blanks", func() {
+		It("squash: works without preserve-path logic (now handled in main workflow)", func() {
 			opts.PreservePath = []string{" .github/workflows ", "", "docs"}
 			Expect(opts.squashToOutputBranch()).To(Succeed())
 			s, _ := os.ReadFile(logFile)
-			Expect(string(s)).To(ContainSubstring("restore --source main --staged --worktree .github/workflows"))
-			Expect(string(s)).To(ContainSubstring("restore --source main --staged --worktree docs"))
+			// Should not contain restore commands since preserve-path is handled before squash
+			Expect(string(s)).ToNot(ContainSubstring("restore --source"))
 		})
 
 		It("update: runs squash when --squash is set", func() {

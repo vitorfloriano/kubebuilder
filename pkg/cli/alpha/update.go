@@ -117,8 +117,8 @@ Behavior summary:
 		"After merging, write a single squashed commit with the merge result to a fixed branch "+
 			"named kubebuilder-alpha-update-to-<to-version>.")
 	updateCmd.Flags().StringArrayVar(&opts.PreservePath, "preserve-path", nil,
-		"Paths to preserve from the base branch when squashing (repeatable). "+
-			"Example: --preserve-path .github/workflows")
+		"Paths to preserve from the base branch after merging (repeatable). "+
+			"Works with both squash and non-squash modes. Example: --preserve-path .github/workflows")
 	updateCmd.Flags().StringVar(&opts.OutputBranch, "output-branch", "",
 		"Override the default kubebuilder-alpha-update-to-<to-version> branch name (used with --squash).")
 
