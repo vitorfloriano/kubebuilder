@@ -51,7 +51,7 @@ type Update struct {
 	// Works with both squash and non-squash modes. Example: ".github/workflows"
 	PreservePath []string
 
-	// OutputBranch is the branch name to use with Squash.
+	// OutputBranch is the branch name for the output branch (always created).
 	// If empty, it defaults to "kubebuilder-alpha-update-to-<ToVersion>".
 	OutputBranch string
 
@@ -119,7 +119,7 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to merge upgrade into merge branch: %w", err)
 	}
 
-	// Apply preserve-path after merge but before squash
+	// Apply preserve-path after merge but before creating output branch
 	if len(opts.PreservePath) > 0 {
 		log.Info("Applying preserve-path to restore files from base branch", "from_branch", opts.FromBranch)
 		for _, p := range opts.PreservePath {
@@ -137,56 +137,58 @@ func (opts *Update) Update() error {
 		_ = exec.Command("git", "commit", "--amend", "--no-edit").Run()
 	}
 
-	// If requested, collapse the merge result into a single commit on a fixed branch
+	// Always create output branch after merge and preserve-path completion
+	if err := opts.createOutputBranch(); err != nil {
+		return fmt.Errorf("failed to create output branch: %w", err)
+	}
+
+	// If requested, squash the output branch into a single commit
 	if opts.Squash {
-		if err := opts.squashToOutputBranch(); err != nil {
-			return fmt.Errorf("failed to squash to output branch: %w", err)
+		if err := opts.squashOutputBranch(); err != nil {
+			return fmt.Errorf("failed to squash output branch: %w", err)
 		}
 	}
 	return nil
 }
 
-// squashToOutputBranch takes the exact tree of the MergeBranch and writes it as ONE commit
-// on a branch derived from FromBranch (e.g., "main"). If PreservePath is set, those paths
-// are restored from the base branch after copying the merge tree, so CI config etc. stays put.
-func (opts *Update) squashToOutputBranch() error {
-	// Default output branch name if not provided
+// createOutputBranch creates the output branch by copying the current merge branch state.
+// This always runs after merge and preserve-path completion, regardless of squash mode.
+func (opts *Update) createOutputBranch() error {
+	// Determine output branch name
 	out := opts.OutputBranch
 	if out == "" {
 		out = "kubebuilder-alpha-update-to-" + opts.ToVersion
 	}
 
-	// 1. Start from base (FromBranch)
-	if err := exec.Command("git", "checkout", opts.FromBranch).Run(); err != nil {
-		return fmt.Errorf("checkout %s: %w", opts.FromBranch, err)
-	}
-	if err := exec.Command("git", "checkout", "-B", out, opts.FromBranch).Run(); err != nil {
-		return fmt.Errorf("create/reset %s from %s: %w", out, opts.FromBranch, err)
+	log.Info("Creating output branch", "branch", out, "from_merge_branch", opts.MergeBranch)
+
+	// Create/reset output branch from merge branch
+	if err := exec.Command("git", "checkout", "-B", out, opts.MergeBranch).Run(); err != nil {
+		return fmt.Errorf("failed to create/reset output branch %s from %s: %w", out, opts.MergeBranch, err)
 	}
 
-	// 2. Clean working tree (except .git) so the next checkout is a verbatim snapshot
-	if err := exec.Command("sh", "-c",
-		"find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +").Run(); err != nil {
-		return fmt.Errorf("cleanup output branch: %w", err)
+	log.Info("Output branch created successfully", "branch", out)
+	return nil
+}
+
+// squashOutputBranch squashes the current output branch into a single commit.
+// Assumes we're already on the output branch with all merge and preserve-path changes applied.
+func (opts *Update) squashOutputBranch() error {
+	log.Info("Squashing output branch into single commit")
+
+	// Reset to base branch (soft reset keeps changes staged)
+	if err := exec.Command("git", "reset", "--soft", opts.FromBranch).Run(); err != nil {
+		return fmt.Errorf("failed to soft reset to %s: %w", opts.FromBranch, err)
 	}
 
-	// 3. Bring in the exact content from the merge branch (no re-merge -> no new conflicts)
-	if err := exec.Command("git", "checkout", opts.MergeBranch, "--", ".").Run(); err != nil {
-		return fmt.Errorf("checkout merge content: %w", err)
-	}
-
-	// Note: preserve-path is now applied before squash in the main workflow
-
-	// 5. One commit (keep markers; bypass hooks if repos have pre-commit on conflicts)
-	if err := exec.Command("git", "add", "--all").Run(); err != nil {
-		return fmt.Errorf("stage output: %w", err)
-	}
+	// Create single squashed commit
 	msg := fmt.Sprintf("[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)",
 		opts.FromVersion, opts.ToVersion)
 	if err := exec.Command("git", "commit", "--no-verify", "-m", msg).Run(); err != nil {
-		return nil
+		return nil // Treat commit failure as success (no changes case)
 	}
 
+	log.Info("Output branch squashed successfully")
 	return nil
 }
 

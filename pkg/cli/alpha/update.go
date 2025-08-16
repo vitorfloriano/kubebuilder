@@ -120,7 +120,7 @@ Behavior summary:
 		"Paths to preserve from the base branch after merging (repeatable). "+
 			"Works with both squash and non-squash modes. Example: --preserve-path .github/workflows")
 	updateCmd.Flags().StringVar(&opts.OutputBranch, "output-branch", "",
-		"Override the default kubebuilder-alpha-update-to-<to-version> branch name (used with --squash).")
+		"Override the default kubebuilder-alpha-update-to-<to-version> branch name for the output branch.")
 
 	return updateCmd
 }

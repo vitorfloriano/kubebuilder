@@ -379,27 +379,21 @@ var _ = Describe("Prepare for internal update", func() {
 			}
 		})
 
-		It("should create/reset the output branch and commit one squashed snapshot", func() {
+		It("should squash the current output branch into a single commit", func() {
 			opts.OutputBranch = ""
-			// Note: preserve-path is now handled in main workflow, not during squash
+			// Note: squash now assumes we're already on the output branch
 
-			err = opts.squashToOutputBranch()
+			err = opts.squashOutputBranch()
 			Expect(err).ToNot(HaveOccurred())
 
 			logs, readErr := os.ReadFile(logFile)
 			Expect(readErr).ToNot(HaveOccurred())
 			s := string(logs)
 
-			Expect(s).To(ContainSubstring(fmt.Sprintf("checkout %s", opts.FromBranch)))
-			Expect(s).To(ContainSubstring(fmt.Sprintf(
-				"checkout -B kubebuilder-alpha-update-to-%s %s",
-				opts.ToVersion, opts.FromBranch,
-			)))
-			Expect(s).To(ContainSubstring(
-				"-c find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +",
-			))
-			Expect(s).To(ContainSubstring(fmt.Sprintf("checkout %s -- .", opts.MergeBranch)))
-			Expect(s).To(ContainSubstring("add --all"))
+			// Should do soft reset to base branch
+			Expect(s).To(ContainSubstring(fmt.Sprintf("reset --soft %s", opts.FromBranch)))
+			// Should create single squashed commit
+			Expect(s).To(ContainSubstring("commit --no-verify -m"))
 
 			msg := fmt.Sprintf(
 				"[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)",
@@ -410,15 +404,15 @@ var _ = Describe("Prepare for internal update", func() {
 			Expect(s).To(ContainSubstring("commit --no-verify -m"))
 		})
 
-		It("should respect a custom output branch name", func() {
+		It("should squash with custom output branch logic (squash doesn't handle branch creation anymore)", func() {
 			opts.OutputBranch = "my-custom-branch"
-			err = opts.squashToOutputBranch()
+			err = opts.squashOutputBranch()
 			Expect(err).ToNot(HaveOccurred())
 
 			logs, _ := os.ReadFile(logFile)
-			Expect(string(logs)).To(ContainSubstring(
-				fmt.Sprintf("checkout -B %s %s", "my-custom-branch", opts.FromBranch),
-			))
+			// Squash no longer creates branches - just resets and commits
+			Expect(string(logs)).To(ContainSubstring("reset --soft"))
+			Expect(string(logs)).To(ContainSubstring("commit --no-verify -m"))
 		})
 
 		It("squash: no changes -> commit exits 1 but returns nil", func() {
@@ -429,7 +423,7 @@ exit 0`
 			Expect(mockBinResponse(fake, mockGit)).To(Succeed())
 
 			opts.PreservePath = nil
-			Expect(opts.squashToOutputBranch()).To(Succeed())
+			Expect(opts.squashOutputBranch()).To(Succeed())
 
 			s, _ := os.ReadFile(logFile)
 			Expect(string(s)).To(ContainSubstring("commit --no-verify -m"))
@@ -437,7 +431,7 @@ exit 0`
 
 		It("squash: works without preserve-path logic (now handled in main workflow)", func() {
 			opts.PreservePath = []string{" .github/workflows ", "", "docs"}
-			Expect(opts.squashToOutputBranch()).To(Succeed())
+			Expect(opts.squashOutputBranch()).To(Succeed())
 			s, _ := os.ReadFile(logFile)
 			// Should not contain restore commands since preserve-path is handled before squash
 			Expect(string(s)).ToNot(ContainSubstring("restore --source"))
@@ -447,9 +441,11 @@ exit 0`
 			opts.Squash = true
 			Expect(opts.Update()).To(Succeed())
 			s, _ := os.ReadFile(logFile)
-			Expect(string(s)).To(ContainSubstring("checkout -B kubebuilder-alpha-update-to-" + opts.ToVersion + " main"))
-			Expect(string(s)).To(ContainSubstring("-c find . -mindepth 1"))
-			Expect(string(s)).To(ContainSubstring("checkout " + opts.MergeBranch + " -- ."))
+			// Should create output branch from merge branch
+			Expect(string(s)).To(ContainSubstring("checkout -B kubebuilder-alpha-update-to-" + opts.ToVersion + " " + opts.MergeBranch))
+			// Should then squash with soft reset and commit
+			Expect(string(s)).To(ContainSubstring("reset --soft main"))
+			Expect(string(s)).To(ContainSubstring("commit --no-verify -m"))
 		})
 	})
 })
