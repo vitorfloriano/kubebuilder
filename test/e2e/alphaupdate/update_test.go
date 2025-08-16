@@ -131,13 +131,13 @@ var _ = Describe("kubebuilder", func() {
 			By("modifying original Makefile to use CONTROLLER_TOOLS_VERSION v0.17.3")
 			modifyMakefileControllerTools(kbc.Dir, "v0.17.3")
 
-			By("running alpha update with --force --squash")
+			By("running alpha update with --force (squash is now default)")
 			cmd := exec.Command(
 				kbc.BinaryName, "alpha", "update",
 				"--from-version", fromVersion,
 				"--to-version", toVersionWithConflict,
 				"--from-branch", "main",
-				"--force", "--squash",
+				"--force",
 			)
 			cmd.Dir = kbc.Dir
 			out, err := kbc.Run(cmd)

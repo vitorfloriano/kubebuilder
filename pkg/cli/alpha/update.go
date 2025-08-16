@@ -35,7 +35,7 @@ func NewUpdateCommand() *cobra.Command {
 	opts := update.Update{}
 	updateCmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update your project to a newer version (3-way merge; optional single-commit)",
+		Short: "Update your project to a newer version (3-way merge; single-commit by default)",
 		Long: `Upgrade your project scaffold using a 3-way merge strategy while preserving your code.
 
 The command creates temporary branches to perform the update:
@@ -44,22 +44,22 @@ The command creates temporary branches to perform the update:
   - upgrade:   scaffold generated with the target version
   - merge:     result of the 3-way merge (committed; conflict markers kept with --force)
 
-By default, the merge result is committed on the temporary 'merge' branch. 
-Use --squash to snapshot that result into a SINGLE commit on a stable branch,
-ready for a PR:
+By default, creates a SINGLE squashed commit on the output branch:
 
   kubebuilder-alpha-update-to-<to-version>
 
 This keeps history tidy (one commit per update run) and enables idempotent PRs.
+Use --no-squash for debug mode to keep all intermediate commits.
 
 Notes:
   • --force commits even if conflicts occur (markers are kept).
-  • --preserve-path lets you keep files from your base branch when squashing
+  • --preserve-path lets you keep files from your base branch during squashing
     (useful for CI configs like .github/workflows).
-  • --output-branch optionally overrides the default squashed branch name.
+  • --output-branch optionally overrides the default output branch name.
+  • --no-squash enables debug mode with all intermediate commits preserved.
 
 Examples:
-  # Update from the version in PROJECT to the latest, stop on conflicts
+  # Update from the version in PROJECT to the latest (single squashed commit)
   kubebuilder alpha update
 
   # Update from a specific version to latest
@@ -68,14 +68,14 @@ Examples:
   # Update from v4.5.0 to v4.7.0 and keep conflict markers (automation-friendly)
   kubebuilder alpha update --from-version v4.5.0 --to-version v4.7.0 --force
 
-  # Same as above, but produce ONE squashed commit on a stable PR branch
-  kubebuilder alpha update --from-version v4.5.0 --to-version v4.7.0 --force --squash
+  # Debug mode: keep all commits from the 3-way merge
+  kubebuilder alpha update --from-version v4.5.0 --to-version v4.7.0 --force --no-squash
 
-  # Squash while preserving CI workflows from base (e.g., main) on the squashed branch
-  kubebuilder alpha update --force --squash --preserve-path .github/workflows
+  # Preserve CI workflows from base branch during squashing
+  kubebuilder alpha update --force --preserve-path .github/workflows
 
-  # Squash into a custom output branch name
-  kubebuilder alpha update --force --squash --output-branch my-update-branch
+  # Use a custom output branch name
+  kubebuilder alpha update --force --output-branch my-update-branch
 
 Behavior summary:
   • Without --force:
@@ -83,10 +83,11 @@ Behavior summary:
         for manual resolution (no commit made).
   • With --force:
       - Conflicted files are committed on the 'merge' branch with conflict markers.
-  • With --squash:
-      - After the merge step, the exact 'merge' tree is copied to a new/updated branch
-        (default: kubebuilder-alpha-update-to-<to-version>) and committed ONCE, keeping markers
-        if present. This branch is intended for opening/refreshing a PR.`,
+  • By default (squashed):
+      - After the merge step, all commits are squashed into ONE commit on the output branch
+        (default: kubebuilder-alpha-update-to-<to-version>) using interactive rebase.
+  • With --no-squash (debug mode):
+      - All intermediate commits from the 3-way merge are preserved on the output branch.`,
 		PreRunE: func(_ *cobra.Command, _ []string) error {
 			err := opts.Prepare()
 			if err != nil {
@@ -113,9 +114,9 @@ Behavior summary:
 	updateCmd.Flags().BoolVar(&opts.Force, "force", false,
 		"Force the update even if conflicts occur. Conflicted files will include conflict markers, and a "+
 			"commit will be created automatically. Ideal for automation (e.g., cronjobs, CI).")
-	updateCmd.Flags().BoolVar(&opts.Squash, "squash", false,
-		"After merging, write a single squashed commit with the merge result to a fixed branch "+
-			"named kubebuilder-alpha-update-to-<to-version>.")
+	updateCmd.Flags().BoolVar(&opts.NoSquash, "no-squash", false,
+		"Debug mode: keep all commits from the 3-way merge instead of squashing into a single commit. "+
+			"By default, the output branch contains a single squashed commit.")
 	updateCmd.Flags().StringArrayVar(&opts.PreservePath, "preserve-path", nil,
 		"Paths to preserve from the base branch after merging (repeatable). "+
 			"Works with both squash and non-squash modes. Example: --preserve-path .github/workflows")

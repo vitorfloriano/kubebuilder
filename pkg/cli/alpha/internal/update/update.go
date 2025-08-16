@@ -43,9 +43,9 @@ type Update struct {
 	// Force commits the update changes even with merge conflicts
 	Force bool
 
-	// Squash writes the merge result as a single commit on a stable branch when true.
-	// The branch defaults to "kubebuilder-alpha-update-to-<ToVersion>" unless OutputBranch is set.
-	Squash bool
+	// NoSquash keeps all commits from the 3-way merge when true (debug mode).
+	// By default (false), the output branch is squashed into a single commit.
+	NoSquash bool
 
 	// PreservePath lists paths to restore from the base branch after merging (repeatable).
 	// Works with both squash and non-squash modes. Example: ".github/workflows"
@@ -138,15 +138,9 @@ func (opts *Update) Update() error {
 	}
 
 	// Always create output branch after merge and preserve-path completion
+	// Squashing already happened during merge step based on NoSquash flag
 	if err := opts.createOutputBranch(); err != nil {
 		return fmt.Errorf("failed to create output branch: %w", err)
-	}
-
-	// If requested, squash the output branch into a single commit
-	if opts.Squash {
-		if err := opts.squashOutputBranch(); err != nil {
-			return fmt.Errorf("failed to squash output branch: %w", err)
-		}
 	}
 	return nil
 }
@@ -171,26 +165,6 @@ func (opts *Update) createOutputBranch() error {
 	return nil
 }
 
-// squashOutputBranch squashes the current output branch into a single commit.
-// Assumes we're already on the output branch with all merge and preserve-path changes applied.
-func (opts *Update) squashOutputBranch() error {
-	log.Info("Squashing output branch into single commit")
-
-	// Reset to base branch (soft reset keeps changes staged)
-	if err := exec.Command("git", "reset", "--soft", opts.FromBranch).Run(); err != nil {
-		return fmt.Errorf("failed to soft reset to %s: %w", opts.FromBranch, err)
-	}
-
-	// Create single squashed commit
-	msg := fmt.Sprintf("[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)",
-		opts.FromVersion, opts.ToVersion)
-	if err := exec.Command("git", "commit", "--no-verify", "-m", msg).Run(); err != nil {
-		return nil // Treat commit failure as success (no changes case)
-	}
-
-	log.Info("Output branch squashed successfully")
-	return nil
-}
 
 // regenerateProjectWithVersion downloads the release binary for the specified version,
 // and runs the `alpha generate` command to re-scaffold the project
@@ -413,7 +387,15 @@ func (opts *Update) mergeOriginalToUpgrade() error {
 		return fmt.Errorf("failed to checkout base branch %s: %w", opts.MergeBranch, err)
 	}
 
-	mergeCmd := exec.Command("git", "merge", "--no-edit", "--no-commit", opts.OriginalBranch)
+	// Use --squash by default to create a single commit, or --no-commit for debug mode
+	var mergeCmd *exec.Cmd
+	if opts.NoSquash {
+		// Debug mode: keep all commits with --no-commit for manual commit
+		mergeCmd = exec.Command("git", "merge", "--no-edit", "--no-commit", opts.OriginalBranch)
+	} else {
+		// Default: squash all commits into staged changes for single commit
+		mergeCmd = exec.Command("git", "merge", "--squash", opts.OriginalBranch)
+	}
 	err := mergeCmd.Run()
 
 	hasConflicts := false
@@ -447,14 +429,24 @@ func (opts *Update) mergeOriginalToUpgrade() error {
 		return fmt.Errorf("failed to stage merge results: %w", err)
 	}
 
-	message := fmt.Sprintf("Merge from %s to %s.", opts.FromVersion, opts.ToVersion)
-	if hasConflicts {
-		message += " With conflicts - manual resolution required."
+	var message string
+	if opts.NoSquash {
+		// Debug mode: regular merge commit message
+		message = fmt.Sprintf("Merge from %s to %s.", opts.FromVersion, opts.ToVersion)
+		if hasConflicts {
+			message += " With conflicts - manual resolution required."
+		} else {
+			message += " Merge happened without conflicts."
+		}
 	} else {
-		message += " Merge happened without conflicts."
+		// Default squash mode: single commit message
+		message = fmt.Sprintf("[kubebuilder-automated-update]: update scaffold from %s to %s; (squashed 3-way merge)", opts.FromVersion, opts.ToVersion)
+		if hasConflicts {
+			message += " With conflicts - manual resolution required."
+		}
 	}
 
-	_ = exec.Command("git", "commit", "-m", message).Run()
+	_ = exec.Command("git", "commit", "--no-verify", "-m", message).Run()
 
 	return nil
 }
