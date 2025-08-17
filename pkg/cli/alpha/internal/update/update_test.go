@@ -410,6 +410,49 @@ exit 0`
 		})
 	})
 
+	Context("CleanupTempBranches", func() {
+		BeforeEach(func() {
+			opts.AncestorBranch = "tmp-ancestor-test"
+			opts.OriginalBranch = "tmp-original-test"
+			opts.UpgradeBranch = "tmp-upgrade-test"
+			opts.MergeBranch = "tmp-merge-test"
+		})
+
+		It("should cleanup all temporary branches", func() {
+			err = opts.cleanupTempBranches()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			s := string(logs)
+
+			// Should delete all temp branches
+			Expect(s).To(ContainSubstring("branch -D tmp-ancestor-test"))
+			Expect(s).To(ContainSubstring("branch -D tmp-original-test"))
+			Expect(s).To(ContainSubstring("branch -D tmp-upgrade-test"))
+			Expect(s).To(ContainSubstring("branch -D tmp-merge-test"))
+		})
+
+		It("should handle cleanup failures gracefully", func() {
+			// Make git command fail
+			fakeBinScript := `#!/bin/bash
+echo "$@" >> "` + logFile + `"
+if [[ "$1" == "branch" && "$2" == "-D" ]]; then exit 1; fi
+exit 0`
+			err = mockBinResponse(fakeBinScript, mockGit)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Should not fail even if branch deletion fails
+			err = opts.cleanupTempBranches()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, _ := os.ReadFile(logFile)
+			s := string(logs)
+			// Should still attempt to delete all branches
+			Expect(s).To(ContainSubstring("branch -D"))
+		})
+	})
+
 	Context("UpdateWorkflow", func() {
 		BeforeEach(func() {
 			opts.FromBranch = "main"
@@ -419,8 +462,8 @@ exit 0`
 			}
 		})
 
-		It("update: squashes by default using separate squash step", func() {
-			// Default behavior should squash after merge
+		It("update: squashes by default using separate squash step and cleans up temp branches", func() {
+			// Default behavior should squash after merge and cleanup temp branches
 			Expect(opts.Update()).To(Succeed())
 			s, _ := os.ReadFile(logFile)
 			// Should create output branch from merge branch
@@ -429,10 +472,12 @@ exit 0`
 			Expect(string(s)).To(ContainSubstring("merge --no-edit --no-commit"))
 			// Should have separate squash step with reset --soft
 			Expect(string(s)).To(ContainSubstring("reset --soft main"))
+			// Should cleanup temp branches by default
+			Expect(string(s)).To(ContainSubstring("branch -D"))
 		})
 
-		It("update: keeps all commits when --no-squash is set", func() {
-			opts.NoSquash = true
+		It("update: keeps all commits and temp branches when --debug is set", func() {
+			opts.Debug = true
 			Expect(opts.Update()).To(Succeed())
 			s, _ := os.ReadFile(logFile)
 			// Should create output branch from merge branch
@@ -441,6 +486,8 @@ exit 0`
 			Expect(string(s)).To(ContainSubstring("merge --no-edit --no-commit"))
 			// Should NOT have squash step
 			Expect(string(s)).ToNot(ContainSubstring("reset --soft"))
+			// Should NOT cleanup temp branches when --debug is used
+			Expect(string(s)).ToNot(ContainSubstring("branch -D"))
 		})
 
 		It("update: preserve-path works in both modes", func() {

@@ -153,9 +153,9 @@ make all
 | `--to-version`    | Version to upgrade to. Defaults to the latest release.                                                                                     |
 | `--from-branch`   | Git branch that has your current project code. Defaults to `main`.                                                                          |
 | `--force`         | Continue even if merge conflicts happen. Conflicted files are committed with conflict markers (useful for CI/cron).                         |
-| `--squash`        | Write the merge result as **one commit** on a stable output branch.                                                                         |
-| `--preserve-path` | Repeatable. With `--squash`, restore these paths from the base branch (e.g., `--preserve-path .github/workflows`).                          |
-| `--output-branch` | Branch name to use for the squashed commit (default: `kubebuilder-alpha-update-to-<to-version>`).                                          |
+| `--debug`         | Debug mode: keep all commits from the 3-way merge and preserve temporary branches for inspection.                                           |
+| `--preserve-path` | Repeatable. Restore these paths from the base branch (e.g., `--preserve-path .github/workflows`).                                          |
+| `--output-branch` | Branch name to use for the output commit (default: `kubebuilder-alpha-update-from-<from-version>-to-<to-version>`).                       |
 | `-h, --help`      | Show help for this command.                                                                                                                |
 
 <aside class="note">

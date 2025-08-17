@@ -49,14 +49,14 @@ By default, creates a SINGLE squashed commit on the output branch:
   kubebuilder-alpha-update-to-<to-version>
 
 This keeps history tidy (one commit per update run) and enables idempotent PRs.
-Use --no-squash for debug mode to keep all intermediate commits.
+Use --debug for debug mode to keep all intermediate commits and temporary branches.
 
 Notes:
   • --force commits even if conflicts occur (markers are kept).
   • --preserve-path lets you keep files from your base branch during squashing
     (useful for CI configs like .github/workflows).
   • --output-branch optionally overrides the default output branch name.
-  • --no-squash enables debug mode with all intermediate commits preserved.
+  • --debug enables debug mode with all intermediate commits preserved.
 
 Examples:
   # Update from the version in PROJECT to the latest (single squashed commit)
@@ -69,7 +69,7 @@ Examples:
   kubebuilder alpha update --from-version v4.5.0 --to-version v4.7.0 --force
 
   # Debug mode: keep all commits from the 3-way merge
-  kubebuilder alpha update --from-version v4.5.0 --to-version v4.7.0 --force --no-squash
+  kubebuilder alpha update --from-version v4.5.0 --to-version v4.7.0 --force --debug
 
   # Preserve CI workflows from base branch during squashing
   kubebuilder alpha update --force --preserve-path .github/workflows
@@ -86,8 +86,9 @@ Behavior summary:
   • By default (squashed):
       - After the merge step, all commits are squashed into ONE commit on the output branch
         (default: kubebuilder-alpha-update-to-<to-version>) using interactive rebase.
-  • With --no-squash (debug mode):
-      - All intermediate commits from the 3-way merge are preserved on the output branch.`,
+  • With --debug (debug mode):
+      - All intermediate commits from the 3-way merge are preserved on the output branch.
+      - Temporary branches (tmp-ancestor-*, tmp-original-*, tmp-upgrade-*, tmp-merge-*) are kept for inspection.`,
 		PreRunE: func(_ *cobra.Command, _ []string) error {
 			err := opts.Prepare()
 			if err != nil {
@@ -114,12 +115,12 @@ Behavior summary:
 	updateCmd.Flags().BoolVar(&opts.Force, "force", false,
 		"Force the update even if conflicts occur. Conflicted files will include conflict markers, and a "+
 			"commit will be created automatically. Ideal for automation (e.g., cronjobs, CI).")
-	updateCmd.Flags().BoolVar(&opts.NoSquash, "no-squash", false,
-		"Debug mode: keep all commits from the 3-way merge instead of squashing into a single commit. "+
-			"By default, the output branch contains a single squashed commit.")
+	updateCmd.Flags().BoolVar(&opts.Debug, "debug", false,
+		"Debug mode: keep all commits from the 3-way merge and preserve temporary branches for inspection. "+
+			"By default, the output branch contains a single squashed commit and temporary branches are cleaned up.")
 	updateCmd.Flags().StringArrayVar(&opts.PreservePath, "preserve-path", nil,
 		"Paths to preserve from the base branch after merging (repeatable). "+
-			"Works with both squash and non-squash modes. Example: --preserve-path .github/workflows")
+			"Works with both squash and debug modes. Example: --preserve-path .github/workflows")
 	updateCmd.Flags().StringVar(&opts.OutputBranch, "output-branch", "",
 		"Override the default kubebuilder-alpha-update-to-<to-version> branch name for the output branch.")
 

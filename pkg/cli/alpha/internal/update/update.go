@@ -43,12 +43,13 @@ type Update struct {
 	// Force commits the update changes even with merge conflicts
 	Force bool
 
-	// NoSquash keeps all commits from the 3-way merge when true (debug mode).
+	// Debug keeps all commits from the 3-way merge when true (debug mode).
 	// By default (false), the output branch is squashed into a single commit.
-	NoSquash bool
+	// This is controlled by the --debug CLI flag.
+	Debug bool
 
 	// PreservePath lists paths to restore from the base branch after merging (repeatable).
-	// Works with both squash and non-squash modes. Example: ".github/workflows"
+	// Works with both squash and debug modes. Example: ".github/workflows"
 	PreservePath []string
 
 	// OutputBranch is the branch name for the output branch (always created).
@@ -142,11 +143,18 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to create output branch: %w", err)
 	}
 
-	// Squash by default, unless --no-squash is specified (debug mode)
-	if !opts.NoSquash {
+	// Squash by default, unless --debug is specified (debug mode)
+	if !opts.Debug {
 		if err := opts.squashOutputBranch(); err != nil {
 			return fmt.Errorf("failed to squash output branch: %w", err)
 		}
+		// Cleanup temporary branches after squashing (default behavior)
+		if err := opts.cleanupTempBranches(); err != nil {
+			log.Warn("Failed to cleanup temporary branches", "error", err)
+			// Don't fail the update for cleanup issues
+		}
+	} else {
+		log.Info("Debug mode: preserving temporary branches for inspection")
 	}
 	return nil
 }
@@ -189,6 +197,33 @@ func (opts *Update) squashOutputBranch() error {
 	}
 
 	log.Info("Output branch squashed successfully using reset --soft")
+	return nil
+}
+
+// cleanupTempBranches removes all temporary branches created during the update process.
+// This is called by default after squashing to keep the repository clean.
+func (opts *Update) cleanupTempBranches() error {
+	log.Info("Cleaning up temporary branches")
+	
+	tempBranches := []string{
+		opts.AncestorBranch,
+		opts.OriginalBranch,
+		opts.UpgradeBranch,
+		opts.MergeBranch,
+	}
+	
+	for _, branch := range tempBranches {
+		if branch != "" {
+			log.Info("Deleting temporary branch", "branch", branch)
+			// Use -D to force delete even if not fully merged
+			if err := exec.Command("git", "branch", "-D", branch).Run(); err != nil {
+				log.Warn("Failed to delete temporary branch", "branch", branch, "error", err)
+				// Continue with other branches even if one fails
+			}
+		}
+	}
+	
+	log.Info("Temporary branch cleanup completed")
 	return nil
 }
 
