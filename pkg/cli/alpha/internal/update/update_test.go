@@ -81,6 +81,10 @@ var _ = Describe("Prepare for internal update", func() {
 		mocksh = filepath.Join(tmpDir, "sh")
 		script := `#!/bin/bash
             echo "$@" >> "` + logFile + `"
+            # Mock git rev-parse HEAD to return a test SHA
+            if [[ "$1" == "rev-parse" && "$2" == "HEAD" ]]; then
+                echo "abc123def456789012345678901234567890abcd"
+            fi
            exit 0`
 		err = mockBinResponse(script, mockGit)
 		Expect(err).NotTo(HaveOccurred())
@@ -111,6 +115,23 @@ var _ = Describe("Prepare for internal update", func() {
 			logs, readErr := os.ReadFile(logFile)
 			Expect(readErr).ToNot(HaveOccurred())
 			Expect(string(logs)).To(ContainSubstring(fmt.Sprintf("checkout %s", opts.FromBranch)))
+		})
+
+		It("Should capture HEAD commit SHA and use it for squashing", func() {
+			err = opts.Update()
+			Expect(err).ToNot(HaveOccurred())
+			
+			// Verify that SHA was captured
+			Expect(opts.FromBranchSHA).To(Equal("abc123def456789012345678901234567890abcd"))
+			
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			logStr := string(logs)
+			
+			// Should call git rev-parse HEAD to capture SHA
+			Expect(logStr).To(ContainSubstring("rev-parse HEAD"))
+			// Should use SHA for squashing instead of branch name
+			Expect(logStr).To(ContainSubstring("reset --soft abc123def456789012345678901234567890abcd"))
 		})
 		It("Should fail when git command fails", func() {
 			fakeBinScript := `#!/bin/bash
@@ -377,10 +398,11 @@ var _ = Describe("Prepare for internal update", func() {
 	Context("SquashOutputBranch", func() {
 		BeforeEach(func() {
 			opts.FromBranch = "main"
+			opts.FromBranchSHA = "abc123def456" // Mock SHA for testing
 			opts.ToVersion = "v4.6.0"
 		})
 
-		It("should squash the output branch into a single commit using reset --soft", func() {
+		It("should squash the output branch into a single commit using reset --soft to SHA", func() {
 			err = opts.squashOutputBranch()
 			Expect(err).ToNot(HaveOccurred())
 
@@ -388,8 +410,8 @@ var _ = Describe("Prepare for internal update", func() {
 			Expect(readErr).ToNot(HaveOccurred())
 			s := string(logs)
 
-			// Should reset --soft to base branch
-			Expect(s).To(ContainSubstring(fmt.Sprintf("reset --soft %s", opts.FromBranch)))
+			// Should reset --soft to SHA instead of branch name
+			Expect(s).To(ContainSubstring(fmt.Sprintf("reset --soft %s", opts.FromBranchSHA)))
 
 			// Should create squashed commit
 			Expect(s).To(ContainSubstring("commit --no-verify -m"))
@@ -405,7 +427,7 @@ exit 0`
 			Expect(opts.squashOutputBranch()).To(Succeed())
 
 			s, _ := os.ReadFile(logFile)
-			Expect(string(s)).To(ContainSubstring("reset --soft"))
+			Expect(string(s)).To(ContainSubstring(fmt.Sprintf("reset --soft %s", opts.FromBranchSHA)))
 			Expect(string(s)).To(ContainSubstring("commit --no-verify -m"))
 		})
 	})
@@ -470,8 +492,8 @@ exit 0`
 			Expect(string(s)).To(ContainSubstring("checkout -B kubebuilder-alpha-update-to-" + opts.ToVersion + " " + opts.MergeBranch))
 			// Should use regular merge --no-commit during merge step
 			Expect(string(s)).To(ContainSubstring("merge --no-edit --no-commit"))
-			// Should have separate squash step with reset --soft
-			Expect(string(s)).To(ContainSubstring("reset --soft main"))
+			// Should have separate squash step with reset --soft (to a SHA, not branch name)
+			Expect(string(s)).To(ContainSubstring("reset --soft"))
 			// Should cleanup temp branches by default
 			Expect(string(s)).To(ContainSubstring("branch -D"))
 		})

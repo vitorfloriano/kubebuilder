@@ -40,6 +40,9 @@ type Update struct {
 	ToVersion string
 	// FromBranch stores the branch to update from, e.g., "main".
 	FromBranch string
+	// FromBranchSHA stores the HEAD commit SHA of the from-branch at the start of the update.
+	// Used for safer squashing operations instead of relying on branch name references.
+	FromBranchSHA string
 	// Force commits the update changes even with merge conflicts
 	Force bool
 
@@ -71,6 +74,15 @@ func (opts *Update) Update() error {
 	if err := checkoutCmd.Run(); err != nil {
 		return fmt.Errorf("failed to checkout base branch %s: %w", opts.FromBranch, err)
 	}
+
+	// Capture the HEAD commit SHA of the from-branch for safer squashing
+	shaCmd := exec.Command("git", "rev-parse", "HEAD")
+	shaOutput, err := shaCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD commit SHA of %s: %w", opts.FromBranch, err)
+	}
+	opts.FromBranchSHA = strings.TrimSpace(string(shaOutput))
+	log.Info("Captured base branch HEAD commit", "branch", opts.FromBranch, "sha", opts.FromBranchSHA)
 
 	suffix := time.Now().Format("02-01-06-15-04")
 
@@ -181,12 +193,15 @@ func (opts *Update) createOutputBranch() error {
 
 // squashOutputBranch squashes all commits on the current output branch into a single commit.
 // Uses git reset --soft to preserve all changes while collapsing the commit history.
+// Uses the stored SHA for safer operation instead of relying on branch name references.
 func (opts *Update) squashOutputBranch() error {
-	log.Info("Squashing output branch into single commit using reset --soft")
+	log.Info("Squashing output branch into single commit using reset --soft", "target_sha", opts.FromBranchSHA)
 
-	// Reset to the base branch while keeping all changes staged
-	if err := exec.Command("git", "reset", "--soft", opts.FromBranch).Run(); err != nil {
-		return fmt.Errorf("failed to reset --soft to %s: %w", opts.FromBranch, err)
+	// Reset to the base branch SHA while keeping all changes staged
+	// This is safer than using branch name as it ensures we reset to the exact commit
+	// that was the HEAD when the update started, even if the branch has moved
+	if err := exec.Command("git", "reset", "--soft", opts.FromBranchSHA).Run(); err != nil {
+		return fmt.Errorf("failed to reset --soft to SHA %s: %w", opts.FromBranchSHA, err)
 	}
 
 	// Create single commit with all squashed changes
