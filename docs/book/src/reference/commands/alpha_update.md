@@ -50,7 +50,7 @@ The command creates three temporary branches:
   `kubebuilder-update-from-<from-version>-to-<to-version>`.
 - You can change the behavior:
     - `--show-commits`: keep the full history.
-    - `--preserve-path`: in squash mode, restore specific files (like CI configs) from your base branch.
+    - `--preserve-path`: restore specific files (like CI configs) from your base branch. Works with both squash and show-commits modes.
     - `--output-branch`: pick a custom branch name.
     - `--push`: push the result to `origin` automatically.
 
@@ -85,10 +85,18 @@ Keep full history instead of squashing:
 kubebuilder alpha update --from-version v4.5.0 --to-version v4.7.0 --force --show-commits
 ```
 
-Default squash but **preserve** CI/workflows from the base branch:
+**Preserve** CI/workflows from the base branch (works with both squash and show-commits):
 
 ```shell
 kubebuilder alpha update --force \
+--preserve-path .github/workflows \
+--preserve-path docs
+```
+
+Show commits mode with preserved paths:
+
+```shell
+kubebuilder alpha update --force --show-commits \
 --preserve-path .github/workflows \
 --preserve-path docs
 ```
@@ -140,8 +148,8 @@ make all
 | `--to-version`    | Kubebuilder release to update **to** (e.g., `v4.7.0`). If unset, defaults to the latest available release.                                                  |
 | `--from-branch`   | Git branch that holds your current project code. Defaults to `main`.                                                                                        |
 | `--force`         | Continue even if merge conflicts happen. Conflicted files are committed with conflict markers (CI/cron friendly).                                           |
-| `--show-commits`  | Keep full history (do not squash). **Not compatible** with `--preserve-path`.                                                                               |
-| `--preserve-path` | Repeatable. **Squash mode only.** After copying the merge tree to the output branch, restore these paths from the base branch (e.g., `.github/workflows`).  |
+| `--show-commits`  | Keep full history (do not squash). Compatible with `--preserve-path`.                                                                                      |
+| `--preserve-path` | Repeatable. Works with both squash and show-commits modes. Restores these paths from the base branch (e.g., `.github/workflows`).                        |
 | `--output-branch` | Name of the output branch. Default: `kubebuilder-update-from-<from-version>-to-<to-version>`.                                                               |
 | `--push`          | Push the output branch to the `origin` remote after the update completes.                                                                                   |
 | `-h, --help`      | Show help for this command.                                                                                                                                 |

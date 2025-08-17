@@ -276,6 +276,59 @@ var _ = Describe("kubebuilder", func() {
 			Expect(string(data)).To(ContainSubstring("KEEP_ME"))
 		})
 
+		It("should preserve specified paths with show-commits mode", func() {
+			By("adding a workflow on main branch that should be preserved")
+			wfDir := filepath.Join(kbc.Dir, ".github", "workflows")
+			Expect(os.MkdirAll(wfDir, 0o755)).To(Succeed())
+			wf := filepath.Join(wfDir, "show-commits.yml")
+			Expect(os.WriteFile(wf, []byte("name: KEEP_ME_SHOW_COMMITS\n"), 0o644)).To(Succeed())
+
+			git := func(args ...string) {
+				c := exec.Command("git", args...)
+				c.Dir = kbc.Dir
+				o, e := c.CombinedOutput()
+				Expect(e).NotTo(HaveOccurred(), string(o))
+			}
+			git("add", ".github/workflows/show-commits.yml")
+			git("commit", "-m", "add show-commits workflow")
+
+			By("running update with --show-commits and --preserve-path")
+			cmd := exec.Command(
+				kbc.BinaryName, "alpha", "update",
+				"--from-version", fromVersion,
+				"--to-version", toVersion,
+				"--from-branch", "main",
+				"--show-commits",
+				"--preserve-path", ".github/workflows",
+			)
+			cmd.Dir = kbc.Dir
+			out, err := kbc.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), string(out))
+
+			By("workflow content is preserved on output branch")
+			data, err := os.ReadFile(wf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(ContainSubstring("KEEP_ME_SHOW_COMMITS"))
+
+			By("checking that preserve-path works with show-commits (full history is kept)")
+			prBranch := "kubebuilder-update-from-" + fromVersion + "-to-" + toVersion
+			gitCmd := func(args ...string) ([]byte, error) {
+				cmd := exec.Command("git", args...)
+				cmd.Dir = kbc.Dir
+				return cmd.CombinedOutput()
+			}
+
+			// Check that the output branch exists
+			_, err = gitCmd("rev-parse", "--verify", prBranch)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Check that it has more than 1 commit (not squashed)
+			count, err := gitCmd("rev-list", "--count", prBranch, "^main")
+			Expect(err).NotTo(HaveOccurred())
+			commitCount := strings.TrimSpace(string(count))
+			Expect(commitCount).NotTo(Equal("1"), "Expected more than 1 commit in show-commits mode")
+		})
+
 		It("should succeed with no action when from-version and to-version are the same", func() {
 			cmd := exec.Command(kbc.BinaryName, "alpha", "update",
 				"--from-version", fromVersion,

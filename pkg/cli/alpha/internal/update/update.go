@@ -57,9 +57,8 @@ type Update struct {
 	ShowCommits bool
 
 	// PreservePath is a list of paths to restore from the base branch (FromBranch)
-	// when SQUASHING, so things like CI config remain unchanged.
+	// so things like CI config remain unchanged. Works with both squash and show-commits modes.
 	// Example: []string{".github/workflows"}
-	// NOTE: This is ignored when ShowCommits == true.
 	PreservePath []string
 
 	// OutputBranch is the name of the branch that will receive the result:
@@ -142,6 +141,24 @@ func (opts *Update) Update() error {
 		return fmt.Errorf("failed to merge upgrade into merge branch: %w", err)
 	}
 
+	// Apply preserve-path logic after merge but before creating output branch
+	// This way it works for both squash and show-commits modes
+	if len(opts.PreservePath) > 0 {
+		log.Info("Applying preserve-path to restore files from base branch", "from_branch", opts.FromBranch)
+		opts.preservePaths()
+		
+		// Stage and commit the preserved paths
+		if err := exec.Command("git", "add", "--all").Run(); err != nil {
+			log.Warn("Failed to stage preserved paths", "error", err)
+		} else {
+			// Only commit if there are actual changes
+			if err := helpers.CommitIgnoreEmpty(
+				"(chore) preserve paths from base branch", "preserve-paths"); err != nil {
+				log.Warn("Failed to commit preserved paths", "error", err)
+			}
+		}
+	}
+
 	// Squash or keep commits based on ShowCommits flag
 	if opts.ShowCommits {
 		log.Info("Keeping commits history")
@@ -217,8 +234,7 @@ func (opts *Update) preservePaths() {
 }
 
 // squashToOutputBranch takes the exact tree of the MergeBranch and writes it as ONE commit
-// on a branch derived from FromBranch (e.g., "main"). If PreservePath is set, those paths
-// are restored from the base branch after copying the merge tree, so CI config etc. stays put.
+// on a branch derived from FromBranch (e.g., "main").
 func (opts *Update) squashToOutputBranch(hasConflicts bool) error {
 	out := opts.getOutputBranchName()
 
@@ -238,10 +254,8 @@ func (opts *Update) squashToOutputBranch(hasConflicts bool) error {
 		return fmt.Errorf("checkout %s content: %w", "merge", err)
 	}
 
-	// 3) optionally restore preserved paths from base (tests assert on 'git restore …')
-	opts.preservePaths()
-
-	// 4) stage and single squashed commit
+	// 3) stage and single squashed commit
+	// Note: preserve-path logic is now handled earlier in the main Update() flow
 	if err := exec.Command("git", "add", "--all").Run(); err != nil {
 		return fmt.Errorf("stage output: %w", err)
 	}

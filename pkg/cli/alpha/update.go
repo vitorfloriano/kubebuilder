@@ -42,14 +42,14 @@ The updater uses four temporary branches during the run:
 Output branch & history:
   • Default: SQUASH the merge result into ONE commit on:
         kubebuilder-update-from-<from-version>-to-<to-version>
-  • --show-commits: keep full history (not compatible with --preserve-path).
+  • --show-commits: keep full history.
 
 Conflicts:
   • Default: stop on conflicts and leave the merge branch for manual resolution.
   • --force: commit with conflict markers so automation can proceed.
 
 Other options:
-  • --preserve-path: restore paths from base when squashing (e.g., CI configs).
+  • --preserve-path: restore paths from base (e.g., CI configs).
   • --output-branch: override the output branch name.
   • --push: push the output branch to 'origin' after the update.
 
@@ -78,10 +78,6 @@ Defaults:
   # Run update and push the output branch to origin (works with or without --show-commits)
   kubebuilder alpha update --from-version v4.6.0 --to-version v4.7.0 --force --push`,
 		PreRunE: func(_ *cobra.Command, _ []string) error {
-			if opts.ShowCommits && len(opts.PreservePath) > 0 {
-				return fmt.Errorf("the --preserve-path flag is not supported with --show-commits")
-			}
-
 			if err := opts.Prepare(); err != nil {
 				return fmt.Errorf("failed to prepare update: %w", err)
 			}
@@ -108,7 +104,7 @@ Defaults:
 	updateCmd.Flags().BoolVar(&opts.ShowCommits, "show-commits", false,
 		"If set, the update will keep the full history instead of squashing into a single commit.")
 	updateCmd.Flags().StringArrayVar(&opts.PreservePath, "preserve-path", nil,
-		"Paths to preserve from the base branch when squashing (repeatable). Not supported with --show-commits. "+
+		"Paths to preserve from the base branch (repeatable). Works with both squash and show-commits modes. "+
 			"Example: --preserve-path .github/workflows")
 	updateCmd.Flags().StringVar(&opts.OutputBranch, "output-branch", "",
 		"Override the default output branch name (default: kubebuilder-update-from-<from-version>-to-<to-version>).")

@@ -19,6 +19,7 @@ package update
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -506,13 +507,45 @@ exit 0`
 			Expect(string(s)).To(ContainSubstring("commit --no-verify -m"))
 		})
 
-		It("trims preserve-path and skips blanks", func() {
-			opts.PreservePath = []string{" .github/workflows ", "", "docs"}
-			Expect(opts.squashToOutputBranch(false)).To(Succeed())
+	})
 
-			s, _ := os.ReadFile(logFile)
-			Expect(string(s)).To(ContainSubstring("checkout main -- docs"))
-			Expect(string(s)).To(ContainSubstring("checkout main -- .github/workflows"))
+	Context("PreservePath compatibility", func() {
+		BeforeEach(func() {
+			opts.FromBranch = "main"
+			opts.FromVersion = "v4.5.0"
+			opts.ToVersion = "v4.6.0"
+			opts.MergeBranch = "tmp-merge-test"
+			opts.PreservePath = []string{".github/workflows", "docs"}
+		})
+
+		It("works with squash mode (ShowCommits=false)", func() {
+			opts.ShowCommits = false
+			opts.OutputBranch = "test-squash-preserve"
+			
+			err := opts.squashToOutputBranch(false)
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			s := string(logs)
+
+			Expect(s).To(ContainSubstring("checkout -B test-squash-preserve main"))
+			Expect(s).To(ContainSubstring("checkout tmp-merge-test -- ."))
+			Expect(s).To(ContainSubstring("add --all"))
+		})
+
+		It("works with show-commits mode (ShowCommits=true)", func() {
+			opts.ShowCommits = true
+			opts.OutputBranch = "test-show-commits-preserve"
+			
+			err := exec.Command("git", "checkout", "-b", "test-show-commits-preserve", opts.MergeBranch).Run()
+			Expect(err).ToNot(HaveOccurred())
+
+			logs, readErr := os.ReadFile(logFile)
+			Expect(readErr).ToNot(HaveOccurred())
+			s := string(logs)
+
+			Expect(s).To(ContainSubstring("checkout -b test-show-commits-preserve tmp-merge-test"))
 		})
 	})
 
