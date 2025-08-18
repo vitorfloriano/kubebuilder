@@ -28,6 +28,7 @@ import (
 // NewUpdateCommand creates and returns a new Cobra command for updating Kubebuilder projects.
 func NewUpdateCommand() *cobra.Command {
 	opts := update.Update{}
+	var gitCfg []string
 	updateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "Update your project to a newer version (3-way merge; squash by default)",
@@ -52,6 +53,8 @@ Other options:
   • --preserve-path: restore paths from base when squashing (e.g., CI configs).
   • --output-branch: override the output branch name.
   • --push: push the output branch to 'origin' after the update.
+  • --git-config: pass per-invocation Git config as -c key=value (repeatable). When not set,
+      defaults to -c merge.renameLimit=999999 to improve rename detection during merges.
 
 Defaults:
   • --from-version / --to-version: resolved from PROJECT and the latest release if unset.
@@ -76,11 +79,30 @@ Defaults:
   kubebuilder alpha update --force --show-commits --output-branch my-update-branch
 
   # Run update and push the output branch to origin (works with or without --show-commits)
-  kubebuilder alpha update --from-version v4.6.0 --to-version v4.7.0 --force --push`,
+  kubebuilder alpha update --from-version v4.6.0 --to-version v4.7.0 --force --push
+
+  # Replace the built-in defaults (provide your own set)
+  kubebuilder alpha update \
+    --git-config merge.conflictStyle=diff3 \
+    --git-config rerere.enabled=true
+
+  # Keep the defaults AND add more (re-specify the defaults explicitly)
+  kubebuilder alpha update \
+    --git-config merge.renameLimit=999999 \
+    --git-config diff.renameLimit=999999 \
+    --git-config merge.conflictStyle=diff3 \
+    --git-config rerere.enabled=true`,
 		PreRunE: func(_ *cobra.Command, _ []string) error {
 			if opts.ShowCommits && len(opts.PreservePath) > 0 {
 				return fmt.Errorf("the --preserve-path flag is not supported with --show-commits")
 			}
+
+			// Set default value for gitConfig
+			if len(gitCfg) == 0 {
+				// default: always enable robust rename detection for merges
+				gitCfg = []string{"merge.renameLimit=999999", "diff.renameLimit=999999"}
+			}
+			opts.GitConfig = gitCfg
 
 			if err := opts.Prepare(); err != nil {
 				return fmt.Errorf("failed to prepare update: %w", err)
@@ -114,6 +136,21 @@ Defaults:
 		"Override the default output branch name (default: kubebuilder-update-from-<from-version>-to-<to-version>).")
 	updateCmd.Flags().BoolVar(&opts.Push, "push", false,
 		"Push the output branch to the remote repository after the update.")
+	updateCmd.Flags().StringArrayVar(
+		&gitCfg,
+		"git-config",
+		nil,
+		"Per-invocation Git config (repeatable). "+
+			"Defaults (when this flag is omitted): -c merge.renameLimit=999999 -c diff.renameLimit=999999. "+
+			"IMPORTANT: If you pass --git-config, your values REPLACE those defaults. "+
+			"To keep the defaults and add more, include them explicitly.\n"+
+			"Examples:\n"+
+			"  # replace defaults:\n"+
+			"  --git-config merge.conflictStyle=diff3 --git-config rerere.enabled=true\n"+
+			"  # keep defaults and add more:\n"+
+			"  --git-config merge.renameLimit=999999 --git-config diff.renameLimit=999999 \\\n"+
+			"  --git-config merge.conflictStyle=diff3 --git-config rerere.enabled=true",
+	)
 
 	return updateCmd
 }
