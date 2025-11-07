@@ -3,5 +3,29 @@
 }
 
 #sidebar-toggle-anchor:checked .page-wrapper {
-    margin-inline-start: calc(var(--sidebar-width) + var(--sidebar-resize-indicator-width));
+    margin-inline-start: calc(
+        var(--sidebar-width) + var(--sidebar-resize-indicator-width)
+    );
+}
+
+/* Rounded corners for code blocks */
+pre {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.hljs {
+    border-radius: 8px !important;
+}
+
+.navy .hljs {
+    background-color: #252839;
+}
+
+.light .hljs {
+    background-color: #f1f6f9;
+}
+
+code {
+    border-radius: 8px;
 }
