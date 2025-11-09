@@ -1,17 +1,30 @@
+#sidebar-toggle-anchor:checked .page-wrapper {
+    margin-inline-start: calc(
+        var(--sidebar-width) + var(--sidebar-resize-indicator-width)
+    );
+}
+
+/* Sets the size of the logo on the menu bar */
 .large-logo-img {
     height: 50px;
 }
 
+/* Centers the logo on the menu bar */
 .menu-title {
     display: flex;
     align-items: center; /* vertical centering */
     justify-content: center; /* horizontal centering */
 }
 
-#sidebar-toggle-anchor:checked .page-wrapper {
-    margin-inline-start: calc(
-        var(--sidebar-width) + var(--sidebar-resize-indicator-width)
-    );
+/* Sets different font for headers */
+.header {
+    font-family: "Poppins", sans-serif;
+}
+
+/* Fixes excessive margin on top of headers */
+h2,
+h3 {
+    margin-block-start: 10px;
 }
 
 /* Rounded corners for code blocks */
@@ -31,6 +44,7 @@ html {
     scrollbar-color: var(--scrollbar) transparent;
 }
 
+/* Fixes links formatting */
 .content a {
     text-decoration: solid underline var(--links);
 }
