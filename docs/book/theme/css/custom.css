@@ -1,5 +1,11 @@
-.menu-title img {
-    vertical-align: bottom;
+.large-logo-img {
+    height: 50px;
+}
+
+.menu-title {
+    display: flex;
+    align-items: center; /* vertical centering */
+    justify-content: center; /* horizontal centering */
 }
 
 #sidebar-toggle-anchor:checked .page-wrapper {
@@ -9,20 +15,142 @@
 }
 
 /* Rounded corners for code blocks */
-code {
-    border-radius: 8px;
+code,
+:not(pre) > hljs,
+.hjls {
+    border-radius: 6px;
 }
 
-/* Improves contrast in codeblocks for Navy and Light themes */
-.navy .hljs {
-    background-color: #252839;
+/* Fixes contrast in codeblocks */
+.hljs {
+    background-color: var(--codeblock-bg);
 }
 
-.light .hljs {
-    background-color: #f1f6f9;
-}
-
-/* Fixes scrollbars background color */
+/* Fixes scrollbar background color */
 html {
-    scrollbar-color: var(--theme-popup-border) transparent;
+    scrollbar-color: var(--scrollbar) transparent;
+}
+
+.content a {
+    text-decoration: solid underline var(--links);
+}
+
+/* === Themes === */
+
+.navy {
+    /* dark theme */
+    /* === Base === */
+    --bg: hsl(220, 13%, 10%); /* deep navy background */
+    --fg: hsl(220, 14%, 70%); /* main readable text */
+
+    /* === Sidebar === */
+    --sidebar-bg: #1a2233; /* slightly lighter than bg for depth */
+    --sidebar-fg: #b8c2d1; /* muted light gray text */
+    --sidebar-non-existant: #5b80c1; /* subdued accent for disabled items */
+    --sidebar-active: #789ad0; /* active item – ties to lighter logo tone */
+    --sidebar-spacer: #2a3448; /* divider tone */
+
+    /* === Scrollbar === */
+    --scrollbar: var(--theme-popup-border);
+
+    /* === Icons === */
+    --icons: hsl(220, 14%, 71%); /* bluish tint to blend with theme */
+    --icons-hover: #93afdb; /* lighter hover contrast */
+
+    /* === Links & Inline code === */
+    --links: #93afdb; /* gentle bright blue links */
+    --inline-code-color: var(--fg); /* highlight within text */
+
+    /* === Theme Popup === */
+    --theme-popup-bg: #1a2233;
+    --theme-popup-border: #2a3448;
+    --theme-hover: #141a27; /* subtle lift */
+
+    /* === Quotes === */
+    --quote-bg: #141a27;
+    --quote-border: #2a3448;
+
+    /* === Warnings === */
+    --warning-border: #ff6b6b; /* warm contrast */
+
+    /* === Tables === */
+    --table-border-color: #2a3448;
+    --table-header-bg: #1f293d;
+    --table-alternate-bg: #131b2a;
+
+    /* === Search === */
+    --searchbar-border-color: #2a3448;
+    --searchbar-bg: #1a2233;
+    --searchbar-fg: #e5e9f0;
+    --searchbar-shadow-color: #466bb3;
+    --searchresults-header-fg: #93afdb;
+    --searchresults-border-color: #2a3448;
+    --searchresults-li-bg: #141a27;
+    --search-mark-bg: #5b80c1;
+
+    /* === Scheme === */
+    --color-scheme: dark;
+
+    /* === Code Block Color === */
+    --codeblock-bg: var(--sidebar-bg);
+
+    /* === Titles and Subtitles === */
+    --title-color: var(--sidebar-active);
+}
+
+.light {
+    /* === Base === */
+    --bg: hsla(50, 25%, 96%);
+    --fg: #111827;
+
+    /* === Sidebar === */
+    --sidebar-bg: #e1e7f0; /* visibly distinct from bg, helps anchor layout */
+    --sidebar-fg: #334155; /* stronger gray-blue text */
+    --sidebar-non-existant: #7b8da8; /* muted inactive tone */
+    --sidebar-active: #3f6ec6; /* Kubebuilder brand blue */
+    --sidebar-spacer: #c9d3e0; /* stronger divider */
+
+    /* === Scrollbar === */
+    --scrollbar: var(--theme-popup-border);
+
+    /* === Icons === */
+    --icons: #747474; /* bold icon blue */
+    --icons-hover: #3f6ec6; /* brighter hover tone */
+
+    /* === Links & Inline code === */
+    --links: #2f5a9a; /* darker blue for better legibility */
+    --inline-code-color: var(--fg); /* consistent blue for inline code */
+
+    /* === Theme Popup === */
+    --theme-popup-bg: #ffffff; /* elevated card layer */
+    --theme-popup-border: #c9d3e0;
+    --theme-hover: #e3e9f2; /* soft lift */
+
+    /* === Quotes === */
+    --quote-bg: #e4eaf3; /* distinguishable but subtle */
+    --quote-border: #bfcadb; /* muted blue-gray line */
+
+    /* === Warnings === */
+    --warning-border: #e07b00; /* deeper amber for clear contrast */
+
+    /* === Tables === */
+    --table-border-color: #c9d3e0;
+    --table-header-bg: #e1e7f0;
+    --table-alternate-bg: #f0f3f8;
+
+    /* === Search === */
+    --searchbar-border-color: #c9d3e0;
+    --searchbar-bg: #ffffff;
+    --searchbar-fg: #111827;
+    --searchbar-shadow-color: #3f6ec6;
+    --searchresults-header-fg: #3f6ec6;
+    --searchresults-border-color: #c9d3e0;
+    --searchresults-li-bg: #e4eaf3;
+    --search-mark-bg: #5a8be0;
+
+    /* === Scheme === */
+    --color-scheme: light;
+
+    /* === Code Block Color === */
+    --codeblock-bg: var(--sidebar-bg);
 }
