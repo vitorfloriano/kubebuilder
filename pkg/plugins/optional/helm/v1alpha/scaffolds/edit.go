@@ -44,6 +44,10 @@ import (
 
 var _ plugins.Scaffolder = &editScaffolder{}
 
+// labelRegex matches and captures labels sections for removal.
+// Pre-compiled for better performance since removeLabels can be called multiple times.
+var labelRegex = regexp.MustCompile(`(?m)^  labels:\n(?:    [^\n]+\n)*`)
+
 type editScaffolder struct {
 	config config.Config
 
@@ -563,10 +567,7 @@ func isMetricRBACFile(subDir, srcFile string) bool {
 
 // removeLabels removes any existing labels section from the content
 func removeLabels(content string) string {
-	labelRegex := `(?m)^  labels:\n(?:    [^\n]+\n)*`
-	re := regexp.MustCompile(labelRegex)
-
-	return re.ReplaceAllString(content, "")
+	return labelRegex.ReplaceAllString(content, "")
 }
 
 func hasWebhooksWith(c config.Config) bool {

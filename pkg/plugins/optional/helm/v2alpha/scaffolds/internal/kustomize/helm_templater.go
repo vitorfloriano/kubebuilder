@@ -47,6 +47,64 @@ const (
 	chartNameTemplate = "chart.name"
 )
 
+// Pre-compiled regular expressions for better performance.
+// These patterns are used repeatedly during helm templating and
+// are compiled once at package initialization instead of per-call.
+var (
+	// managedByRegex matches the kustomize managed-by label
+	managedByRegex = regexp.MustCompile(`(\s*)app\.kubernetes\.io/managed-by:\s+kustomize`)
+
+	// argsPatternRegex matches the args block in deployments
+	argsPatternRegex = regexp.MustCompile(`(?m)([ \t]+)args:\n((?:[ \t]+-.*\n)+)`)
+
+	// certManagerAnnotationRegex matches cert-manager.io/inject-ca-from annotation
+	certManagerAnnotationRegex = regexp.MustCompile(`(\s+)cert-manager\.io/inject-ca-from:\s*[^\n]+`)
+
+	// leadingWhitespaceRegex extracts leading whitespace
+	leadingWhitespaceRegex = regexp.MustCompile(`^(\s+)`)
+
+	// webhookArgPatternRegex matches --webhook-cert-path argument
+	webhookArgPatternRegex = regexp.MustCompile(`([ \t]+)-\s*--webhook-cert-path=[^\n]*`)
+
+	// metricsArgPatternRegex matches --metrics-cert-path argument
+	metricsArgPatternRegex = regexp.MustCompile(`([ \t]+)-\s*--metrics-cert-path=[^\n]*`)
+
+	// webhookVolumePatternRegex matches webhook-certs volume definition
+	webhookVolumePatternRegex = regexp.MustCompile(
+		`([ \t]+)-\s*name:\s*webhook-certs[\s\S]*?secretName:\s*webhook-server-cert`)
+
+	// webhookVolumeMountPatternRegex matches webhook-certs volumeMount
+	webhookVolumeMountPatternRegex = regexp.MustCompile(
+		`([ \t]+)-\s*mountPath:\s*/tmp/k8s-webhook-server/serving-certs[\s\S]*?readOnly:\s*true`)
+
+	// metricsVolumePatternRegex matches metrics-certs volume definition
+	metricsVolumePatternRegex = regexp.MustCompile(
+		`([ \t]+)-\s*name:\s*metrics-certs[\s\S]*?secretName:\s*metrics-server-cert`)
+
+	// metricsVolumeMountPatternRegex matches metrics-certs volumeMount
+	metricsVolumeMountPatternRegex = regexp.MustCompile(
+		`([ \t]+)-\s*mountPath:\s*/tmp/k8s-metrics-server/metrics-certs[\s\S]*?readOnly:\s*true`)
+
+	// containerPortWebhookRegex matches webhook-server containerPort
+	containerPortWebhookRegex = regexp.MustCompile(
+		`(?m)(\s*- )?containerPort:\s*\d+(\s*\n\s*name:\s*webhook-server)`)
+
+	// targetPort9443Regex matches targetPort: 9443
+	targetPort9443Regex = regexp.MustCompile(`(\s*)targetPort:\s*9443`)
+
+	// port8443Regex matches port: 8443
+	port8443Regex = regexp.MustCompile(`(\s*)port:\s*8443`)
+
+	// targetPort8443Regex matches targetPort: 8443
+	targetPort8443Regex = regexp.MustCompile(`(\s*)targetPort:\s*8443`)
+
+	// metricsBindAddressRegex matches --metrics-bind-address argument
+	metricsBindAddressRegex = regexp.MustCompile(`--metrics-bind-address=:[0-9]+`)
+
+	// webhookPortArgRegex matches --webhook-port argument
+	webhookPortArgRegex = regexp.MustCompile(`--webhook-port=[0-9]+`)
+)
+
 // HelmTemplater handles converting YAML content to Helm templates
 type HelmTemplater struct {
 	projectName string
@@ -166,8 +224,7 @@ func (t *HelmTemplater) substituteCertManagerReferences(yamlContent string, _ *u
 // addHelmLabelsAndAnnotations replaces kustomize managed-by labels with Helm equivalents
 func (t *HelmTemplater) addHelmLabelsAndAnnotations(yamlContent string, _ *unstructured.Unstructured) string {
 	// Replace app.kubernetes.io/managed-by: kustomize with Helm template
-	// Use regex to handle different whitespace patterns
-	managedByRegex := regexp.MustCompile(`(\s*)app\.kubernetes\.io/managed-by:\s+kustomize`)
+	// Use pre-compiled regex to handle different whitespace patterns
 	yamlContent = managedByRegex.ReplaceAllString(yamlContent, "${1}app.kubernetes.io/managed-by: {{ .Release.Service }}")
 
 	return yamlContent
@@ -458,8 +515,7 @@ func (t *HelmTemplater) templateControllerManagerArgs(yamlContent string) string
 		return yamlContent
 	}
 
-	argsPattern := regexp.MustCompile(`(?m)([ \t]+)args:\n((?:[ \t]+-.*\n)+)`)
-	loc := argsPattern.FindStringSubmatchIndex(yamlContent)
+	loc := argsPatternRegex.FindStringSubmatchIndex(yamlContent)
 	if loc == nil {
 		return yamlContent
 	}
@@ -625,10 +681,9 @@ func (t *HelmTemplater) makeWebhookAnnotationsConditional(yamlContent string) st
 	// Find cert-manager.io/inject-ca-from annotation and make it conditional
 	if strings.Contains(yamlContent, "cert-manager.io/inject-ca-from") {
 		// Replace the cert-manager annotation with conditional wrapper
-		certManagerPattern := regexp.MustCompile(`(\s+)cert-manager\.io/inject-ca-from:\s*[^\n]+`)
-		yamlContent = certManagerPattern.ReplaceAllStringFunc(yamlContent, func(match string) string {
+		yamlContent = certManagerAnnotationRegex.ReplaceAllStringFunc(yamlContent, func(match string) string {
 			// Extract the indentation
-			indentMatch := regexp.MustCompile(`^(\s+)`).FindStringSubmatch(match)
+			indentMatch := leadingWhitespaceRegex.FindStringSubmatch(match)
 			indent := ""
 			if len(indentMatch) > 1 {
 				indent = indentMatch[1]
@@ -650,9 +705,8 @@ func (t *HelmTemplater) makeContainerArgsConditional(yamlContent string) string 
 	// Make webhook-cert-path arg conditional on certManager.enable
 	if strings.Contains(yamlContent, "--webhook-cert-path") {
 		// Match only spaces/tabs for indent to avoid consuming the newline
-		webhookArgPattern := regexp.MustCompile(`([ \t]+)-\s*--webhook-cert-path=[^\n]*`)
-		yamlContent = webhookArgPattern.ReplaceAllStringFunc(yamlContent, func(match string) string {
-			indentMatch := regexp.MustCompile(`^(\s+)`).FindStringSubmatch(match)
+		yamlContent = webhookArgPatternRegex.ReplaceAllStringFunc(yamlContent, func(match string) string {
+			indentMatch := leadingWhitespaceRegex.FindStringSubmatch(match)
 			indent := ""
 			if len(indentMatch) > 1 {
 				indent = indentMatch[1]
@@ -667,9 +721,8 @@ func (t *HelmTemplater) makeContainerArgsConditional(yamlContent string) string 
 	// Make metrics-cert-path arg conditional on certManager.enable AND metrics.enable
 	if strings.Contains(yamlContent, "--metrics-cert-path") {
 		// Match only spaces/tabs for indent to avoid consuming the newline
-		metricsArgPattern := regexp.MustCompile(`([ \t]+)-\s*--metrics-cert-path=[^\n]*`)
-		yamlContent = metricsArgPattern.ReplaceAllStringFunc(yamlContent, func(match string) string {
-			indentMatch := regexp.MustCompile(`^(\s+)`).FindStringSubmatch(match)
+		yamlContent = metricsArgPatternRegex.ReplaceAllStringFunc(yamlContent, func(match string) string {
+			indentMatch := leadingWhitespaceRegex.FindStringSubmatch(match)
 			indent := ""
 			if len(indentMatch) > 1 {
 				indent = indentMatch[1]
@@ -689,8 +742,7 @@ func (t *HelmTemplater) makeWebhookVolumesConditional(yamlContent string) string
 	// Make webhook volumes conditional on certManager.enable
 	if strings.Contains(yamlContent, "webhook-certs") && strings.Contains(yamlContent, "secretName: webhook-server-cert") {
 		// Match only spaces/tabs for indent to avoid consuming the newline
-		volumePattern := regexp.MustCompile(`([ \t]+)-\s*name:\s*webhook-certs[\s\S]*?secretName:\s*webhook-server-cert`)
-		yamlContent = volumePattern.ReplaceAllStringFunc(yamlContent, func(match string) string {
+		yamlContent = webhookVolumePatternRegex.ReplaceAllStringFunc(yamlContent, func(match string) string {
 			lines := strings.Split(match, "\n")
 			if len(lines) > 0 {
 				indent := ""
@@ -726,9 +778,7 @@ func (t *HelmTemplater) makeWebhookVolumeMountsConditional(yamlContent string) s
 	webhookCertsPath := "/tmp/k8s-webhook-server/serving-certs"
 	if strings.Contains(yamlContent, "webhook-certs") && strings.Contains(yamlContent, webhookCertsPath) {
 		// Match only spaces/tabs for indent to avoid consuming the newline
-		mountPattern := regexp.MustCompile(
-			`([ \t]+)-\s*mountPath:\s*/tmp/k8s-webhook-server/serving-certs[\s\S]*?readOnly:\s*true`)
-		yamlContent = mountPattern.ReplaceAllStringFunc(yamlContent, func(match string) string {
+		yamlContent = webhookVolumeMountPatternRegex.ReplaceAllStringFunc(yamlContent, func(match string) string {
 			lines := strings.Split(match, "\n")
 			if len(lines) > 0 {
 				indent := ""
@@ -763,8 +813,7 @@ func (t *HelmTemplater) makeMetricsVolumesConditional(yamlContent string) string
 	// Make metrics volumes conditional on certManager.enable AND metrics.enable
 	if strings.Contains(yamlContent, "metrics-certs") && strings.Contains(yamlContent, "secretName: metrics-server-cert") {
 		// Match only spaces/tabs for indent to avoid consuming the newline
-		volumePattern := regexp.MustCompile(`([ \t]+)-\s*name:\s*metrics-certs[\s\S]*?secretName:\s*metrics-server-cert`)
-		yamlContent = volumePattern.ReplaceAllStringFunc(yamlContent, func(match string) string {
+		yamlContent = metricsVolumePatternRegex.ReplaceAllStringFunc(yamlContent, func(match string) string {
 			lines := strings.Split(match, "\n")
 			if len(lines) > 0 {
 				indent := ""
@@ -805,9 +854,7 @@ func (t *HelmTemplater) makeMetricsVolumeMountsConditional(yamlContent string) s
 	metricsCertsPath := "/tmp/k8s-metrics-server/metrics-certs"
 	if strings.Contains(yamlContent, "metrics-certs") && strings.Contains(yamlContent, metricsCertsPath) {
 		// Match only spaces/tabs for indent to avoid consuming the newline
-		mountPattern := regexp.MustCompile(
-			`([ \t]+)-\s*mountPath:\s*/tmp/k8s-metrics-server/metrics-certs[\s\S]*?readOnly:\s*true`)
-		yamlContent = mountPattern.ReplaceAllStringFunc(yamlContent, func(match string) string {
+		yamlContent = metricsVolumeMountPatternRegex.ReplaceAllStringFunc(yamlContent, func(match string) string {
 			lines := strings.Split(match, "\n")
 			if len(lines) > 0 {
 				indent := ""
@@ -948,34 +995,34 @@ func (t *HelmTemplater) templatePorts(yamlContent string, resource *unstructured
 	if isWebhook {
 		// Replace containerPort: 9443 (or any value) for webhook-server with template
 		if strings.Contains(yamlContent, "webhook-server") {
-			yamlContent = regexp.MustCompile(`(?m)(\s*- )?containerPort:\s*\d+(\s*\n\s*name:\s*webhook-server)`).
+			yamlContent = containerPortWebhookRegex.
 				ReplaceAllString(yamlContent, "${1}containerPort: {{ .Values.webhook.port }}${2}")
 		}
 
 		// Replace targetPort: 9443 with webhook.port template
-		yamlContent = regexp.MustCompile(`(\s*)targetPort:\s*9443`).
+		yamlContent = targetPort9443Regex.
 			ReplaceAllString(yamlContent, "${1}targetPort: {{ .Values.webhook.port }}")
 	}
 
 	// Template metrics ports (8443 by default)
 	if isMetrics {
 		// Replace port: 8443 with metrics.port template
-		yamlContent = regexp.MustCompile(`(\s*)port:\s*8443`).
+		yamlContent = port8443Regex.
 			ReplaceAllString(yamlContent, "${1}port: {{ .Values.metrics.port }}")
 
 		// Replace targetPort: 8443 with metrics.port template
-		yamlContent = regexp.MustCompile(`(\s*)targetPort:\s*8443`).
+		yamlContent = targetPort8443Regex.
 			ReplaceAllString(yamlContent, "${1}targetPort: {{ .Values.metrics.port }}")
 	}
 
 	// Template port-related arguments in Deployment
 	if resource.GetKind() == kindDeployment {
 		// Replace --metrics-bind-address=:8443 with templated version
-		yamlContent = regexp.MustCompile(`--metrics-bind-address=:[0-9]+`).
+		yamlContent = metricsBindAddressRegex.
 			ReplaceAllString(yamlContent, "--metrics-bind-address=:{{ .Values.metrics.port }}")
 
 		// Replace --webhook-port=9443 with templated version (if present)
-		yamlContent = regexp.MustCompile(`--webhook-port=[0-9]+`).
+		yamlContent = webhookPortArgRegex.
 			ReplaceAllString(yamlContent, "--webhook-port={{ .Values.webhook.port }}")
 	}
 
