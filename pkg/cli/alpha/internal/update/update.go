@@ -33,6 +33,10 @@ import (
 	"sigs.k8s.io/kubebuilder/v4/pkg/plugin/util"
 )
 
+// logPatternRegex matches old-style log format: level=info msg="message"
+// Pre-compiled for better performance since forwardAndReformat processes many lines.
+var logPatternRegex = regexp.MustCompile(`^level=(\w+)\s+msg="?([^"]*)"?(.*)$`)
+
 // Update contains configuration for the update operation.
 type Update struct {
 	// FromVersion is the release version to update FROM (the base/original scaffold),
@@ -538,14 +542,11 @@ func runAlphaGenerate(tempDir, version string) error {
 func forwardAndReformat(reader io.Reader, isStderr bool) {
 	scanner := bufio.NewScanner(reader)
 
-	// Regex to match old-style log format: level=info msg="message"
-	logPattern := regexp.MustCompile(`^level=(\w+)\s+msg="?([^"]*)"?(.*)$`)
-
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		// Check if this line matches the old log format
-		if matches := logPattern.FindStringSubmatch(line); matches != nil {
+		if matches := logPatternRegex.FindStringSubmatch(line); matches != nil {
 			level := strings.ToUpper(matches[1])
 			message := matches[2]
 			rest := matches[3]
