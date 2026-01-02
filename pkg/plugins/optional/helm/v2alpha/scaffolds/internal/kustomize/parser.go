@@ -22,8 +22,8 @@ import (
 	"os"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	yaml "sigs.k8s.io/yaml/goyaml.v3"
 )
 
 // ParsedResources holds Kubernetes resources organized by type for Helm chart generation
