@@ -1,0 +1,52 @@
+{
+    "name": "Kubebuilder Pro Dev",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "remoteUser": "dev",
+    "containerUser": "dev",
+    "updateRemoteUserUID": true,
+    "mounts": [
+        {
+            "source": "kubebuilder-go-cache",
+            "target": "/go",
+            "type": "volume"
+        }
+    ],
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+            "moby": true,
+            "installDockerBuildx": true,
+            "dockerDefaultAddressPool": "base=172.30.0.0/16,size=24"
+        }
+    },
+    "customizations": {
+        "zed": {
+            "terminal": {
+                "shell": "bash"
+            }
+        }
+    },
+    "containerEnv": {
+        "KUBEBUILDER_ASSETS": "/usr/local/bin",
+        "KIND_EXPERIMENTAL_CONTAINERD_SNAPSHOTTER": "vfs"
+    },
+    "runArgs": [
+        "--init",
+        "--privileged",
+        "--tmpfs",
+        "/tmp:exec",
+        "--tmpfs",
+        "/run",
+        "--tmpfs",
+        "/run/lock",
+        "--cap-add=SYS_PTRACE",
+        "--security-opt",
+        "seccomp=unconfined",
+        "--security-opt",
+        "apparmor=unconfined",
+        "--volume",
+        "/dev/fuse:/dev/fuse"
+    ],
+    "postCreateCommand": "bash .devcontainer/post-install.sh"
+}
