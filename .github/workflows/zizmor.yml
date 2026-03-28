@@ -1,7 +1,8 @@
 name: Pinact
 on:
   pull_request:
-    paths: '**/workflows/*.yml
+    paths: 
+    - '**/workflows/*.yml'
 jobs:
   pinact:
     runs-on: ubuntu-latest
