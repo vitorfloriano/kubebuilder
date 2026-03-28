@@ -21,13 +21,3 @@ jobs:
         uses: suzuki-shunsuke/pinact-action@cf51507d80d4d6522a07348e3d58790290eaf0b6 # v2.0.0
         with:
           skip_push: "true"
-          review: "false"
-          includes: |
-            ./.github/workflows/*.yml
-            ./docs/book/src/cronjob-tutorial/testdata/project/.github/workflows/*.yml
-            ./docs/book/src/multiversion-tutorial/testdata/project/.github/workflows/*.yml
-            ./docs/book/src/getting-started/testdata/project/.github/workflows/*.yml
-            ./pkg/plugins/golang/v4/scaffolds/internal/templates/github/*.go
-            ./pkg/plugins/optional/autoupdate/v1alpha/scaffolds/internal/github/*.go
-            ./pkg/plugins/optional/helm/*/scaffolds/internal/templates/github/*.go
-            ./testdata/*/.github/workflows/*.yml
