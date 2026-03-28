@@ -2,14 +2,7 @@ name: Pinact
 on:
   pull_request:
     paths:
-      - .github/workflows/*.yml
-      - ./docs/book/src/cronjob-tutorial/testdata/project/.github/workflows/*.yml
-      - ./docs/book/src/multiversion-tutorial/testdata/project/.github/workflows/*.yml
-      - ./docs/book/src/getting-started/testdata/project/.github/workflows/*.yml
-      - ./pkg/plugins/golang/v4/scaffolds/internal/templates/github/*.go
-      - ./pkg/plugins/optional/autoupdate/v1alpha/scaffolds/internal/github/*.go
-      - ./pkg/plugins/optional/helm/*/scaffolds/internal/templates/github/*.go
-      - ./testdata/*/.github/workflows/*.yml
+      - '**/workflows/*.yml'
 jobs:
   pinact:
     runs-on: ubuntu-latest
