@@ -7,6 +7,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
@@ -16,10 +18,10 @@ jobs:
       - name: Install pinact
         run: |
           go install github.com/suzuki-shunsuke/pinact/cmd/pinact@latest
-          pinact version
+          ~/go/bin/pinact --version
 
       - name: Pin GitHub Actions
         run: |
-          git diff --name-only HEAD^ HEAD \
+          git diff --name-only origin/${{ github.base_ref }} HEAD \
             | grep -E 'workflows/.*\.ya?ml$' \
-            | xargs ~/go/bin/pinact run --diff --check
+            | xargs ~/go/bin/pinact run --check
