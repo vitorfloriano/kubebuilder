@@ -23,9 +23,6 @@ jobs:
           
       - name: Pin GitHub Actions
         run: |
-          # grab the names of changed files
           git diff --name-only origin/${{ github.base_ref }} HEAD \
-          # from the changed files, grab only the workflow files
           | grep -E 'workflows/.*\.ya?ml$' \
-          # pass the workflow files as arguments to pinact 
           | xargs pinact run --diff --check --verify              
