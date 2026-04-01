@@ -159,14 +159,14 @@ const appWebhookHooksTmpl = `// Package {{ .KindLower }} — user-owned webhook 
 // Implement ValidationHooks and/or DefaultingHooks from
 // internal/platform/webhook/hooks.go.
 package {{ .KindLower }}
-{{ if .Validating }}
+
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"k8s.io/apimachinery/pkg/runtime"{{ if .Validating }}
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"{{ end }}
 )
-
+{{ if .Validating }}
 // ValidationHooksImpl implements platform/webhook.ValidationHooks for {{ .Kind }}.
 type ValidationHooksImpl struct {
 	// TODO: add your dependencies here
@@ -187,9 +187,6 @@ func (h *ValidationHooksImpl) ValidateDelete(_ context.Context, _ runtime.Object
 	return nil, nil
 }
 {{ end }}{{ if .Defaulting }}
-import "context"
-import "k8s.io/apimachinery/pkg/runtime"
-
 // DefaultingHooksImpl implements platform/webhook.DefaultingHooks for {{ .Kind }}.
 type DefaultingHooksImpl struct {
 	// TODO: add your dependencies here

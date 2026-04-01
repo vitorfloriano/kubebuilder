@@ -406,7 +406,7 @@ func CreateAPI(req *external.PluginRequest, resp *external.PluginResponse) error
     }
 
     // Platform files — always overwrite
-    platformFiles, err := generator.RenderAPIplatform(data)
+    platformFiles, err := generator.RenderAPIPlatform(data)
     if err != nil {
         return fmt.Errorf("render platform API templates: %w", err)
     }
@@ -450,8 +450,8 @@ type APIData struct {
 // KindLower returns the lowercase Kind name.
 func (d APIData) KindLower() string { return strings.ToLower(d.Kind) }
 
-// RenderAPIplatform renders platform-layer API templates.
-func RenderAPIplatform(data APIData) (map[string]string, error) {
+// RenderAPIPlatform renders platform-layer API templates.
+func RenderAPIPlatform(data APIData) (map[string]string, error) {
     return renderTemplates(platformAPITemplates, data)
 }
 

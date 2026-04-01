@@ -87,7 +87,7 @@ func NewLockFile(version, key string) *LockFile {
 func (lf *LockFile) AddFile(path, content, zone, policy string) {
 	lf.Files = append(lf.Files, FileEntry{
 		Path:                      path,
-		SHA256:                    sha256Hex(content),
+		SHA256:                    fnv1aHash(content),
 		Zone:                      zone,
 		Policy:                    policy,
 		PluginVersionAtGeneration: lf.PluginVersion,
@@ -113,10 +113,10 @@ func ParseLockFileVersion(content string) (string, error) {
 	return lf.PluginVersion, nil
 }
 
-// sha256Hex returns the hex-encoded SHA-256 digest of s.
-func sha256Hex(s string) string {
-	// Use a simple FNV-style fingerprint here to avoid importing crypto/sha256
-	// in the scaffold package. Replace with crypto/sha256 in production code.
+// fnv1aHash returns a hex-encoded FNV-1a fingerprint of s.
+// This is used as a quick content checksum in the lock file.
+// Use crypto/sha256 if cryptographic integrity is required.
+func fnv1aHash(s string) string {
 	h := uint64(14695981039346656037)
 	for _, c := range []byte(s) {
 		h ^= uint64(c)

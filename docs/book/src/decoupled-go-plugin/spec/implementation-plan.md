@@ -225,7 +225,7 @@
 
 ### Test Tooling
 
-- **Unit:** `go test` + `github.com/stretchr/testify`
+- **Unit:** `go test` with standard `testing` package (add `github.com/stretchr/testify` if preferred)
 - **Integration:** `go test` with `//go:build integration` tag + temp directory scaffolding
 - **E2E:** Kind cluster + Kubebuilder `utils.TestContext` pattern
 - **Coverage:** `go test -coverprofile` + `go tool cover`

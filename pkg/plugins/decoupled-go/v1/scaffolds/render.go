@@ -29,7 +29,7 @@ func render(name, tmplStr string, data any) (string, error) {
 	funcMap := template.FuncMap{
 		"lower": strings.ToLower,
 		"upper": strings.ToUpper,
-		"title": strings.Title, //nolint:staticcheck // acceptable for code generation
+		"title": toTitle,
 	}
 	tmpl, err := template.New(name).Funcs(funcMap).Parse(tmplStr)
 	if err != nil {
@@ -57,4 +57,14 @@ func renderMap(tmplMap map[string]string, data any) (map[string]string, error) {
 		out[path] = content
 	}
 	return out, nil
+}
+
+// toTitle converts the first character of s to upper case.
+// It is a simple ASCII-only title-caser suitable for Go identifiers
+// and avoids the deprecated strings.Title function.
+func toTitle(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
