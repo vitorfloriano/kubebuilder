@@ -10,8 +10,7 @@ on:
       - 'build/.goreleaser.yml'
       - '.github/workflows/release-version-ci.yml'
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   go-releaser-test:

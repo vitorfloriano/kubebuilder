@@ -12,8 +12,7 @@ on:
       - 'docs/book/src/simple-external-plugin-tutorial/testdata/sampleexternalplugin'
       - '.github/workflows/external-plugin.yml'
 
-permissions:
-  contents: read
+permissions: {}
   
 jobs:
   external:

@@ -14,8 +14,7 @@ on:
       - "docs/book/src/multiversion-tutorial/testdata/project/**"
       - ".github/workflows/test-helm-book.yml"
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   helm-test:

@@ -6,8 +6,7 @@ on:
   pull_request:
     paths-ignore: ['**/*.md']
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   coverage:

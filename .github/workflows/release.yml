@@ -4,8 +4,7 @@ on:
     tags:
       - '*'
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   goreleaser:

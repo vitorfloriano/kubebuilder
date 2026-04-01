@@ -8,9 +8,8 @@ on:
     paths:
       - '**/*.md'
 
-permissions:
-  contents: read
-  
+permissions: {}
+
 jobs:
   lint:
     permissions:

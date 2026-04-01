@@ -14,8 +14,7 @@ on:
       - 'docs/book/src/multiversion-tutorial/testdata/project/**'
       - '.github/workflows/test-e2e-book.yml'
 
-permissions:
-  contents: read
+permissions: {}
       
 jobs:
   e2e:

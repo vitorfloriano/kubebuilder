@@ -4,8 +4,7 @@ on:
     paths: 
      - '**/workflows/*.yml'
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   zizmor:

@@ -4,8 +4,7 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   verify:
