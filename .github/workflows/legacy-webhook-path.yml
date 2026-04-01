@@ -14,6 +14,9 @@ on:
       - 'testdata/**'
       - '.github/workflows/legacy-webhook-path.yml'
 
+permissions:
+  contents: read
+
 jobs:
   webhook-legacy-path:
     permissions:

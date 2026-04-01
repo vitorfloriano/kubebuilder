@@ -12,6 +12,9 @@ on:
       - '.github/workflows/test-devcontainer.yml'
       - 'pkg/plugins/golang/v4/scaffolds/internal/templates/devcontainer.go'
 
+permissions:
+  contents: read
+      
 jobs:
   test-devcontainer:
     permissions:

@@ -10,6 +10,9 @@ on:
       - "testdata/project-v4-with-plugins/**"
       - ".github/workflows/test-helm-samples.yml"
 
+permissions:
+  contents: read
+
 jobs:
   helm-test-project-v4-with-plugins:
     permissions:

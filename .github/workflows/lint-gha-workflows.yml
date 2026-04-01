@@ -3,6 +3,10 @@ on:
   pull_request:
     paths: 
      - '**/workflows/*.yml'
+
+permissions:
+  contents: read
+
 jobs:
   zizmor:
     permissions:

@@ -9,6 +9,9 @@ on:
     paths:
       - 'pkg/cli/alpha/**'
       - '.github/workflows/test-alpha-generate.yml'
+
+permissions:
+  contents: read
       
 jobs:
   unsupported:

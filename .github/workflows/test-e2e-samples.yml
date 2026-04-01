@@ -10,6 +10,9 @@ on:
       - 'testdata/**'
       - '.github/workflows/test-e2e-samples.yml'
 
+permissions:
+  contents: read
+
 jobs:
   e2e-tests-project-v4:
     permissions:
