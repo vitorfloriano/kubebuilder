@@ -58,7 +58,7 @@ jobs:
           cd ../..
           cd testdata/project-v4-with-plugins
           go mod tidy
-          echo 'Running build commands for Go in project-v4-with-plugins
+          echo 'Running build commands for Go in project-v4-with-plugins'
           go build ./...
 
       - name: Perform CodeQL Analysis
