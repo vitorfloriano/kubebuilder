@@ -3,7 +3,8 @@
 <img src="./docs/book/src/logos/kb-logo-one-line.svg" alt="kubebuilder logo" width="400" height="auto">
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kubernetes-sigs/kubebuilder/badge)](https://scorecard.dev/viewer/?uri=github.com/kubernetes-sigs/kubebuilder)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/73/badge)](https://www.bestpractices.dev/projects/73)[![Lint](https://github.com/kubernetes-sigs/kubebuilder/actions/workflows/lint.yml/badge.svg)](https://github.com/kubernetes-sigs/kubebuilder/actions/workflows/lint.yml)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/73/badge)](https://www.bestpractices.dev/projects/73)
+[![Lint](https://github.com/kubernetes-sigs/kubebuilder/actions/workflows/lint.yml/badge.svg)](https://github.com/kubernetes-sigs/kubebuilder/actions/workflows/lint.yml)
 [![Go Report Card](https://goreportcard.com/badge/sigs.k8s.io/kubebuilder)](https://goreportcard.com/report/sigs.k8s.io/kubebuilder)
 [![Coverage Status](https://coveralls.io/repos/github/kubernetes-sigs/kubebuilder/badge.svg?branch=master)](https://coveralls.io/github/kubernetes-sigs/kubebuilder?branch=master)
 [![Latest release](https://img.shields.io/github/v/release/kubernetes-sigs/kubebuilder)](https://github.com/kubernetes-sigs/kubebuilder/releases)
