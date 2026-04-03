@@ -5,6 +5,7 @@ on:
   # - `master` represents the latest development work.
   # - `book-v4` is the latest stable release branch, which contains the latest published code,
   #   ensuring that any issues in production are identified and addressed promptly.
+  workflow_dispatch: 
   schedule:
     - cron: '30 20 * * 1'  # Runs every Monday at 8:30 PM
 
