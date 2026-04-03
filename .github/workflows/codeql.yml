@@ -38,25 +38,40 @@ jobs:
           languages: go
           build-mode: manual
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
-        with:
-          languages: actions
-
       # Preparing the project-v4 sample for CodeQL analysis:
       # - `go mod tidy` ensures dependencies are fully resolved.
       # - `make manifests` generates required manifests for a complete project structure.
       # - `make build` builds the project code, ensuring all components are ready for CodeQL analysis.
       - name: Build project-v4 sample project
         run: |
+          go mod tidy
           go build ./...
           cd testdata/project-v4
           go mod tidy
           echo 'Running build commands for Go in project-v4'
-          make manifests 
+          go build ./...
+          cd ../..
+          cd testdata/project-v4-multigroup
+          go mod tidy
+          echo 'Running build commands for Go in project-v4-multigroup'
+          go build ./...
+          cd ../..
+          cd testdata/project-v4-with-plugins
+          go mod tidy
+          echo 'Running build commands for Go in project-v4-with-plugins
           go build ./...
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
         with:
-          category: "/language:go-and-actions"
+          category: "/language:go"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+        with:
+          languages: actions
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+        with:
+          category: "/language:actions"
