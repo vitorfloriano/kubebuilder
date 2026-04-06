@@ -104,6 +104,48 @@ func (c CLI) newRootCmd() *cobra.Command {
 	// Global flags for all subcommands.
 	cmd.PersistentFlags().StringSlice(pluginsFlag, nil, "plugin keys to be used for this subcommand execution")
 
+	cmd.RegisterFlagCompletionFunc(pluginsFlag, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		var matches []string
+
+		// 1. Handle mid-word commas
+		// If toComplete is "p1,p2,p", we only care about "p" for matching,
+		// but we must remember "p1" and "p2" are now "used".
+		parts := strings.Split(toComplete, ",")
+
+		// The fragment the user is currently typing is the last part of the split
+		currentFragment := parts[len(parts)-1]
+
+		// 2. Build the 'Used' map from both previous flags AND the current comma-string
+		used := make(map[string]bool)
+
+		// Values from previous flag instances (--plugins p1 --plugins p2)
+		alreadySelected, _ := cmd.Flags().GetStringSlice(pluginsFlag)
+		for _, s := range alreadySelected {
+			used[strings.TrimSpace(s)] = true
+		}
+
+		// Values from the current string before the last comma (p1,p2,current)
+		for i := 0; i < len(parts)-1; i++ {
+			used[strings.TrimSpace(parts[i])] = true
+		}
+
+		// 3. Match against the fragment, not the whole string
+		for key := range c.plugins {
+			if used[key] || strings.Contains(key, "base.go.kubebuilder.io") {
+				continue
+			}
+
+			if strings.HasPrefix(key, currentFragment) {
+				matches = append(matches, key)
+			}
+		}
+
+		slices.Sort(matches)
+
+		// NoSpace is mandatory here to keep the cursor attached for the next comma
+		return matches, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+	})
+
 	// Register --project-version on the root command so that it shows up in help.
 	cmd.Flags().String(projectVersionFlag, c.defaultProjectVersion.String(), "project version")
 
