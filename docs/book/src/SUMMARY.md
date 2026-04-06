@@ -131,6 +131,23 @@
 
 ---
 
+- [Decoupled Go Plugin — Learning Guide][decoupled-go-guide]
+
+  - [Overview & Learning Path](./decoupled-go-plugin/00-overview.md)
+  - [Chapter 1: Kubebuilder Plugin Model](./decoupled-go-plugin/01-kubebuilder-plugin-model.md)
+  - [Chapter 2: External Plugin Lifecycle](./decoupled-go-plugin/02-external-plugin-lifecycle.md)
+  - [Chapter 3: Decoupled Scaffold Philosophy](./decoupled-go-plugin/03-decoupled-philosophy.md)
+  - [Chapter 4: Design Patterns](./decoupled-go-plugin/04-design-patterns.md)
+  - [Chapter 5: Software Architecture](./decoupled-go-plugin/05-software-architecture.md)
+  - [Chapter 6: Operator Best Practices](./decoupled-go-plugin/06-operator-best-practices.md)
+  - [Chapter 7: Implementation Guide](./decoupled-go-plugin/07-implementation-guide.md)
+  - [Chapter 8: Upgrade & Migration Strategy](./decoupled-go-plugin/08-upgrade-strategy.md)
+  - [Plugin Specification: decoupled-go/v1](./decoupled-go-plugin/spec/plugin-spec.md)
+  - [Implementation Plan & Milestones](./decoupled-go-plugin/spec/implementation-plan.md)
+
+---
+
 [FAQ](./faq.md)
 
 [plugins]: ./plugins/plugins.md
+[decoupled-go-guide]: ./decoupled-go-plugin/00-overview.md
