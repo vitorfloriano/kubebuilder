@@ -26,3 +26,38 @@ type Scaffolder interface {
 	// Scaffold performs the scaffolding
 	Scaffold() error
 }
+
+// ScaffolderHooks holds optional hook functions that are called before and after
+// the main scaffold operation. Use ScaffolderOption functions to configure these hooks
+// when constructing a Scaffolder, allowing custom code injection without altering
+// the scaffold implementation.
+type ScaffolderHooks struct {
+	// PreScaffold is an optional function called before the main scaffold operation.
+	// It receives the filesystem so it can read or write files before the scaffold runs.
+	PreScaffold func(machinery.Filesystem) error
+	// PostScaffold is an optional function called after the main scaffold operation.
+	PostScaffold func() error
+}
+
+// ScaffolderOption is a function type for configuring ScaffolderHooks.
+// It follows the functional options pattern, enabling custom code injection
+// into scaffold operations without modifying the scaffold implementation itself.
+type ScaffolderOption func(*ScaffolderHooks)
+
+// WithPreScaffoldHook returns a ScaffolderOption that registers fn to be called
+// before the main scaffold operation. Use this to inject custom setup or
+// validation logic without altering the scaffold implementation.
+func WithPreScaffoldHook(fn func(machinery.Filesystem) error) ScaffolderOption {
+	return func(h *ScaffolderHooks) {
+		h.PreScaffold = fn
+	}
+}
+
+// WithPostScaffoldHook returns a ScaffolderOption that registers fn to be called
+// after the main scaffold operation. Use this to inject custom cleanup or
+// post-processing logic without altering the scaffold implementation.
+func WithPostScaffoldHook(fn func() error) ScaffolderOption {
+	return func(h *ScaffolderHooks) {
+		h.PostScaffold = fn
+	}
+}

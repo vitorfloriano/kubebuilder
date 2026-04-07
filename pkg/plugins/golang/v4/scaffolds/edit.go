@@ -38,16 +38,25 @@ type editScaffolder struct {
 
 	// fs is the filesystem that will be used by the scaffolder
 	fs machinery.Filesystem
+
+	// hooks holds optional pre/post scaffold hook functions
+	hooks plugins.ScaffolderHooks
 }
 
-// NewEditScaffolder returns a new Scaffolder for configuration edit operations
-func NewEditScaffolder(cfg config.Config, multigroup bool, namespaced bool, force bool) plugins.Scaffolder {
-	return &editScaffolder{
+// NewEditScaffolder returns a new Scaffolder for configuration edit operations.
+// Use ScaffolderOption functions (e.g. plugins.WithPreScaffoldHook,
+// plugins.WithPostScaffoldHook) to inject custom code without altering the scaffold.
+func NewEditScaffolder(cfg config.Config, multigroup bool, namespaced bool, force bool, opts ...plugins.ScaffolderOption) plugins.Scaffolder {
+	s := &editScaffolder{
 		config:     cfg,
 		multigroup: multigroup,
 		namespaced: namespaced,
 		force:      force,
 	}
+	for _, opt := range opts {
+		opt(&s.hooks)
+	}
+	return s
 }
 
 // InjectFS implements cmdutil.Scaffolder
@@ -57,6 +66,12 @@ func (s *editScaffolder) InjectFS(fs machinery.Filesystem) {
 
 // Scaffold implements cmdutil.Scaffolder
 func (s *editScaffolder) Scaffold() error {
+	if s.hooks.PreScaffold != nil {
+		if err := s.hooks.PreScaffold(s.fs); err != nil {
+			return fmt.Errorf("pre-scaffold hook failed: %w", err)
+		}
+	}
+
 	filename := "Dockerfile"
 	bs, err := afero.ReadFile(s.fs.FS, filename)
 	if err != nil {
@@ -142,6 +157,12 @@ func (s *editScaffolder) Scaffold() error {
 		// TODO: instead of writing it directly, we should use the scaffolding machinery for consistency
 		if err = afero.WriteFile(s.fs.FS, filename, []byte(str), 0o644); err != nil {
 			return fmt.Errorf("error writing %q: %w", filename, err)
+		}
+	}
+
+	if s.hooks.PostScaffold != nil {
+		if err := s.hooks.PostScaffold(); err != nil {
+			return fmt.Errorf("post-scaffold hook failed: %w", err)
 		}
 	}
 
