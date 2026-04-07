@@ -51,16 +51,25 @@ type webhookScaffolder struct {
 	// Deprecated - TODO: remove it for go/v5
 	// isLegacy indicates that the resource should be created in the legacy path under the api
 	isLegacy bool
+
+	// hooks holds optional pre/post scaffold hook functions
+	hooks plugins.ScaffolderHooks
 }
 
-// NewWebhookScaffolder returns a new Scaffolder for v2 webhook creation operations
-func NewWebhookScaffolder(cfg config.Config, res resource.Resource, force bool, isLegacy bool) plugins.Scaffolder {
-	return &webhookScaffolder{
+// NewWebhookScaffolder returns a new Scaffolder for v2 webhook creation operations.
+// Use ScaffolderOption functions (e.g. plugins.WithPreScaffoldHook,
+// plugins.WithPostScaffoldHook) to inject custom code without altering the scaffold.
+func NewWebhookScaffolder(cfg config.Config, res resource.Resource, force bool, isLegacy bool, opts ...plugins.ScaffolderOption) plugins.Scaffolder {
+	s := &webhookScaffolder{
 		config:   cfg,
 		resource: res,
 		force:    force,
 		isLegacy: isLegacy,
 	}
+	for _, opt := range opts {
+		opt(&s.hooks)
+	}
+	return s
 }
 
 // InjectFS implements cmdutil.Scaffolder
@@ -71,6 +80,12 @@ func (s *webhookScaffolder) InjectFS(fs machinery.Filesystem) {
 // Scaffold implements cmdutil.Scaffolder
 func (s *webhookScaffolder) Scaffold() error {
 	log.Info("Writing scaffold for you to edit...")
+
+	if s.hooks.PreScaffold != nil {
+		if err := s.hooks.PreScaffold(s.fs); err != nil {
+			return fmt.Errorf("pre-scaffold hook failed: %w", err)
+		}
+	}
 
 	// Load the boilerplate
 	boilerplate, err := afero.ReadFile(s.fs.FS, hack.DefaultBoilerplatePath)
@@ -188,6 +203,13 @@ You need to implement the conversion.Hub and conversion.Convertible interfaces f
 			}
 		}
 	}
+
+	if s.hooks.PostScaffold != nil {
+		if err := s.hooks.PostScaffold(); err != nil {
+			return fmt.Errorf("post-scaffold hook failed: %w", err)
+		}
+	}
+
 	return nil
 }
 

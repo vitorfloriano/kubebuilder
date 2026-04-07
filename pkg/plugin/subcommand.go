@@ -66,6 +66,26 @@ type HasPostScaffold interface {
 	PostScaffold() error
 }
 
+// PreScaffoldFunc is a function type that implements HasPreScaffold.
+// It allows using an ordinary function as a pre-scaffold hook, following
+// the same adapter pattern as http.HandlerFunc.
+type PreScaffoldFunc func(machinery.Filesystem) error
+
+// PreScaffold implements HasPreScaffold.
+func (f PreScaffoldFunc) PreScaffold(fs machinery.Filesystem) error {
+	return f(fs)
+}
+
+// PostScaffoldFunc is a function type that implements HasPostScaffold.
+// It allows using an ordinary function as a post-scaffold hook, following
+// the same adapter pattern as http.HandlerFunc.
+type PostScaffoldFunc func() error
+
+// PostScaffold implements HasPostScaffold.
+func (f PostScaffoldFunc) PostScaffold() error {
+	return f()
+}
+
 // Subcommand is a base interface for all subcommands.
 type Subcommand interface {
 	Scaffolder

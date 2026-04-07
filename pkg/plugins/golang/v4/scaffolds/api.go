@@ -46,15 +46,24 @@ type apiScaffolder struct {
 
 	// force indicates whether to scaffold controller files even if it exists or not
 	force bool
+
+	// hooks holds optional pre/post scaffold hook functions
+	hooks plugins.ScaffolderHooks
 }
 
-// NewAPIScaffolder returns a new Scaffolder for API/controller creation operations
-func NewAPIScaffolder(cfg config.Config, res resource.Resource, force bool) plugins.Scaffolder {
-	return &apiScaffolder{
+// NewAPIScaffolder returns a new Scaffolder for API/controller creation operations.
+// Use ScaffolderOption functions (e.g. plugins.WithPreScaffoldHook,
+// plugins.WithPostScaffoldHook) to inject custom code without altering the scaffold.
+func NewAPIScaffolder(cfg config.Config, res resource.Resource, force bool, opts ...plugins.ScaffolderOption) plugins.Scaffolder {
+	s := &apiScaffolder{
 		config:   cfg,
 		resource: res,
 		force:    force,
 	}
+	for _, opt := range opts {
+		opt(&s.hooks)
+	}
+	return s
 }
 
 // InjectFS implements cmdutil.Scaffolder
@@ -65,6 +74,12 @@ func (s *apiScaffolder) InjectFS(fs machinery.Filesystem) {
 // Scaffold implements cmdutil.Scaffolder
 func (s *apiScaffolder) Scaffold() error {
 	log.Info("Writing scaffold for you to edit...")
+
+	if s.hooks.PreScaffold != nil {
+		if err := s.hooks.PreScaffold(s.fs); err != nil {
+			return fmt.Errorf("pre-scaffold hook failed: %w", err)
+		}
+	}
 
 	// Load the boilerplate
 	boilerplate, err := afero.ReadFile(s.fs.FS, hack.DefaultBoilerplatePath)
@@ -147,6 +162,12 @@ func (s *apiScaffolder) Scaffold() error {
 		},
 	); err != nil {
 		return fmt.Errorf("error updating cmd/main.go: %w", err)
+	}
+
+	if s.hooks.PostScaffold != nil {
+		if err := s.hooks.PostScaffold(); err != nil {
+			return fmt.Errorf("post-scaffold hook failed: %w", err)
+		}
 	}
 
 	return nil

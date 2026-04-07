@@ -61,17 +61,26 @@ type initScaffolder struct {
 
 	// fs is the filesystem that will be used by the scaffolder
 	fs machinery.Filesystem
+
+	// hooks holds optional pre/post scaffold hook functions
+	hooks plugins.ScaffolderHooks
 }
 
-// NewInitScaffolder returns a new Scaffolder for project initialization operations
-func NewInitScaffolder(cfg config.Config, license, owner, commandName string) plugins.Scaffolder {
-	return &initScaffolder{
+// NewInitScaffolder returns a new Scaffolder for project initialization operations.
+// Use ScaffolderOption functions (e.g. plugins.WithPreScaffoldHook,
+// plugins.WithPostScaffoldHook) to inject custom code without altering the scaffold.
+func NewInitScaffolder(cfg config.Config, license, owner, commandName string, opts ...plugins.ScaffolderOption) plugins.Scaffolder {
+	s := &initScaffolder{
 		config:          cfg,
 		boilerplatePath: hack.DefaultBoilerplatePath,
 		license:         license,
 		owner:           owner,
 		commandName:     commandName,
 	}
+	for _, opt := range opts {
+		opt(&s.hooks)
+	}
+	return s
 }
 
 // InjectFS implements cmdutil.Scaffolder
@@ -96,6 +105,12 @@ func getControllerRuntimeReleaseBranch() string {
 // Scaffold implements cmdutil.Scaffolder
 func (s *initScaffolder) Scaffold() error {
 	log.Info("Writing scaffold for you to edit...")
+
+	if s.hooks.PreScaffold != nil {
+		if err := s.hooks.PreScaffold(s.fs); err != nil {
+			return fmt.Errorf("pre-scaffold hook failed: %w", err)
+		}
+	}
 
 	// Initialize the machinery.Scaffold that will write the boilerplate file to disk
 	// The boilerplate file needs to be scaffolded as a separate step as it is going to
@@ -194,6 +209,12 @@ func (s *initScaffolder) Scaffold() error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to execute init scaffold: %w", err)
+	}
+
+	if s.hooks.PostScaffold != nil {
+		if err := s.hooks.PostScaffold(); err != nil {
+			return fmt.Errorf("post-scaffold hook failed: %w", err)
+		}
 	}
 
 	return nil
