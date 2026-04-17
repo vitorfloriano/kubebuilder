@@ -56,4 +56,4 @@ Kubebuilder supports external plugins, but we need clearer, maintained examples 
 
 ### Goals and Needs
 - **Make sampleexternalplugin a Valid Reference Implementation**
-  - [GitHub Issue](https://github.com/kubernetes-sigs/kubebuilder/issues/4146)
+  - [GitHub Issue](https://github.com/kubernetes-sigs/kubebuilder/issues/4828)
