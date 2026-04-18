@@ -268,9 +268,12 @@ func initializationHooks(
 	var options *resourceOptions
 	if requiresResource {
 		options = bindResourceFlags(cmd.Flags())
-		cobra.CheckErr(cmd.MarkFlagRequired("group"))
-		cobra.CheckErr(cmd.MarkFlagRequired("version"))
-		cobra.CheckErr(cmd.MarkFlagRequired("kind"))
+		if err := cmd.MarkFlagRequired("version"); err != nil {
+			return nil, fmt.Errorf("failed to mark 'version' flag as required: %w", err)
+		}
+		if err := cmd.MarkFlagRequired("kind"); err != nil {
+			return nil, fmt.Errorf("failed to mark 'kind' flag as required: %w", err)
+		}
 	}
 
 	// Bind flags hook: each plugin binds to a temporary FlagSet, then we merge into the command so
