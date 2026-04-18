@@ -37,8 +37,7 @@ func (c CLI) newCreateAPICmd() *cobra.Command {
 		),
 	}
 
-	// Show hint message on how to list flags instead of showing file completion for
-	// commands that don't take files as arguments
+	// Show hint message on how to list flags instead of showing file completion
 	cmd.ValidArgsFunction = func(
 		_ *cobra.Command,
 		args []string,
